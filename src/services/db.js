@@ -1,9 +1,59 @@
 // src/services/db.js
 import { supabase } from '../supabaseClient';
 
-// --- TAKIMLARI VE OYUNCULARI ÇEK ---
-export const fetchTeamsWithPlayers = async () => {
+// --- KADROSU 5'TEN AZ OLAN VEYA BOŞ TAKIMLARI 15 OYUNCUYA TAMAMLAMA ---
+export const generateDefaultPlayersDB = async (teamId, existingPlayers = []) => {
+  const currentCount = existingPlayers.length;
+  
+  // Eğer oyuncu sayısı zaten 5 veya üzerindeyse işlem yapma
+  if (currentCount >= 5) return existingPlayers;
+
+  const neededCount = 15 - currentCount; // Kadroyu 15'e tamamlamak için gereken sayı
+  const positions = ['PG', 'SG', 'SF', 'PF', 'C'];
+
+  // Mevcut oyuncuların forma numaralarını al (Çakışmayı önlemek için)
+  const usedNumbers = new Set(existingPlayers.map(p => p.number.toString().trim()));
+
+  const newPlayers = [];
+  let currentNum = 1;
+
+  for (let i = 0; i < neededCount; i++) {
+    // Kullanılmayan ilk uygun forma numarasını bul
+    while (usedNumbers.has(currentNum.toString())) {
+      currentNum++;
+    }
+
+    newPlayers.push({
+      team_id: teamId,
+      name: `Oyuncu ${existingPlayers.length + i + 1}`,
+      number: `${currentNum}`,
+      position: positions[(existingPlayers.length + i) % 5],
+      height: '---',
+      weight: '---',
+      age: null,
+      status: 'active'
+    });
+
+    usedNumbers.add(currentNum.toString());
+    currentNum++;
+  }
+
   const { data, error } = await supabase
+    .from('players')
+    .insert(newPlayers)
+    .select();
+
+  if (error) {
+    console.error('Varsayılan oyuncular eklenirken hata oluştu:', error);
+    return existingPlayers;
+  }
+
+  return [...existingPlayers, ...data];
+};
+
+// --- TAKIMLARI VE OYUNCULARI ÇEK (KONTROL VE EKSİK TAMAMLAMA) ---
+export const fetchTeamsWithPlayers = async () => {
+  const { data: teams, error } = await supabase
     .from('teams')
     .select(`
       id,
@@ -16,7 +66,17 @@ export const fetchTeamsWithPlayers = async () => {
     console.error('Takımlar çekilirken hata oluştu:', error);
     throw error;
   }
-  return data;
+
+  // Oyuncu sayısı 5'ten az olan her takımı otomatik 15'e tamamla
+  for (let i = 0; i < teams.length; i++) {
+    const currentPlayers = teams[i].players || [];
+    if (currentPlayers.length < 5) {
+      const updatedPlayers = await generateDefaultPlayersDB(teams[i].id, currentPlayers);
+      teams[i].players = updatedPlayers;
+    }
+  }
+
+  return teams;
 };
 
 // --- YENİ TAKIM EKLE ---
@@ -30,7 +90,12 @@ export const addTeamDB = async (name, category = 'A Takım') => {
     console.error('Takım eklenirken hata oluştu:', error);
     throw error;
   }
-  return data[0];
+
+  const team = data[0];
+  const generatedPlayers = await generateDefaultPlayersDB(team.id, []);
+  team.players = generatedPlayers;
+
+  return team;
 };
 
 // --- YENİ OYUNCU EKLE ---
@@ -47,17 +112,14 @@ export const addPlayerDB = async (playerData) => {
   return data[0];
 };
 
-// --- OYUNCU DURUMU GÜNCELLE (Aktif / Sakat) ---
+// --- OYUNCU DURUMU GÜNCELLE ---
 export const updatePlayerStatusDB = async (playerId, status) => {
   const { error } = await supabase
     .from('players')
     .update({ status })
     .eq('id', playerId);
 
-  if (error) {
-    console.error('Oyuncu durumu güncellenemedi:', error);
-    throw error;
-  }
+  if (error) throw error;
 };
 
 // --- OYUNCU SİL ---
@@ -67,10 +129,7 @@ export const deletePlayerDB = async (playerId) => {
     .delete()
     .eq('id', playerId);
 
-  if (error) {
-    console.error('Oyuncu silinemedi:', error);
-    throw error;
-  }
+  if (error) throw error;
 };
 
 // --- YENİ MAÇ KAYDI OLUŞTUR ---
@@ -86,45 +145,37 @@ export const createMatchDB = async (homeTeamId, awayTeamId, matchType) => {
     }])
     .select();
 
-  if (error) {
-    console.error('Maç oluşturulurken hata oluştu:', error);
-    throw error;
-  }
+  if (error) throw error;
   return data[0];
 };
 
-// --- MAÇ İSTATİSTİKLERİNİ VE SKORU KAYDET ---
+// --- MAÇ İSTATİSTİKLERİNİ KAYDET (AUTO-SAVE UYUMLU) ---
 export const saveMatchStatsDB = async (matchId, statsArray, finalHomeScore, finalAwayScore) => {
-  if (!matchId) return;
+  if (!matchId || !statsArray || statsArray.length === 0) return;
 
-  // 1. Maç skorunu güncelle
-  const { error: matchError } = await supabase
-    .from('matches')
-    .update({ home_score: finalHomeScore, away_score: finalAwayScore })
-    .eq('id', matchId);
+  try {
+    await supabase
+      .from('matches')
+      .update({ home_score: finalHomeScore, away_score: finalAwayScore })
+      .eq('id', matchId);
 
-  if (matchError) console.error('Maç skoru güncellenemedi:', matchError);
+    const payload = statsArray.map(s => ({
+      match_id: matchId,
+      player_id: s.id,
+      pts: s.pts || 0,
+      reb: s.reb || 0,
+      ast: s.ast || 0,
+      stl: s.stl || 0,
+      blk: s.blk || 0,
+      tov: s.tov || 0,
+      pf: s.pf || 0
+    }));
 
-  // 2. İstatistikleri kaydet
-  const payload = statsArray.map(s => ({
-    match_id: matchId,
-    player_id: s.id,
-    pts: s.pts,
-    reb: s.reb,
-    ast: s.ast,
-    stl: s.stl,
-    blk: s.blk,
-    tov: s.tov,
-    pf: s.pf
-  }));
-
-  const { error: statsError } = await supabase
-    .from('match_stats')
-    .upsert(payload, { onConflict: 'match_id,player_id' });
-
-  if (statsError) {
-    console.error('İstatistikler kaydedilirken hata oluştu:', statsError);
-    throw statsError;
+    await supabase
+      .from('match_stats')
+      .upsert(payload, { onConflict: 'match_id,player_id' });
+  } catch (err) {
+    console.error('Auto-save sırasında hata:', err);
   }
 };
 
@@ -133,17 +184,15 @@ export const fetchGeneralPlayerStatsDB = async (teamId, matchType = 'all') => {
   if (!teamId) return [];
 
   try {
-    // 1. Seçili takıma ait tüm oyuncuları getir
-    const { data: players, error: playerErr } = await supabase
+    const { data: players } = await supabase
       .from('players')
       .select('id, name, number, position')
       .eq('team_id', teamId);
 
-    if (playerErr || !players || players.length === 0) return [];
+    if (!players || players.length === 0) return [];
 
     const playerIds = players.map(p => p.id);
 
-    // 2. Takımın oynadığı maçları filtrele
     let matchQuery = supabase
       .from('matches')
       .select('id, match_type')
@@ -153,51 +202,28 @@ export const fetchGeneralPlayerStatsDB = async (teamId, matchType = 'all') => {
       matchQuery = matchQuery.eq('match_type', matchType);
     }
 
-    const { data: matches, error: matchErr } = await matchQuery;
+    const { data: matches } = await matchQuery;
 
-    // Henüz maç yapılmadıysa oyuncuları 0 istatistikle döndür
-    if (matchErr || !matches || matches.length === 0) {
+    if (!matches || matches.length === 0) {
       return players.map(p => ({
-        id: p.id,
-        name: p.name,
-        number: p.number,
-        position: p.position,
-        gp: 0,
-        pts: 0, reb: 0, ast: 0, stl: 0, blk: 0, tov: 0, pf: 0
+        id: p.id, name: p.name, number: p.number, position: p.position,
+        gp: 0, pts: 0, reb: 0, ast: 0, stl: 0, blk: 0, tov: 0, pf: 0
       }));
     }
 
     const matchIds = matches.map(m => m.id);
 
-    // 3. Bu maçlardaki oyuncu istatistiklerini getir
-    const { data: stats, error: statsErr } = await supabase
+    const { data: stats } = await supabase
       .from('match_stats')
       .select('player_id, pts, reb, ast, stl, blk, tov, pf')
       .in('match_id', matchIds)
       .in('player_id', playerIds);
 
-    if (statsErr) {
-      console.error('İstatistikler çekilirken hata:', statsErr);
-      return players.map(p => ({
-        id: p.id,
-        name: p.name,
-        number: p.number,
-        position: p.position,
-        gp: 0,
-        pts: 0, reb: 0, ast: 0, stl: 0, blk: 0, tov: 0, pf: 0
-      }));
-    }
-
-    // 4. İstatistikleri birleştirip toplamlarını ve oynanan maç sayısını hesapla
     const aggregated = {};
     players.forEach(p => {
       aggregated[p.id] = {
-        id: p.id,
-        name: p.name,
-        number: p.number,
-        position: p.position,
-        gp: 0,
-        pts: 0, reb: 0, ast: 0, stl: 0, blk: 0, tov: 0, pf: 0
+        id: p.id, name: p.name, number: p.number, position: p.position,
+        gp: 0, pts: 0, reb: 0, ast: 0, stl: 0, blk: 0, tov: 0, pf: 0
       };
     });
 
@@ -216,7 +242,7 @@ export const fetchGeneralPlayerStatsDB = async (teamId, matchType = 'all') => {
 
     return Object.values(aggregated);
   } catch (err) {
-    console.error('Genel istatistik servisinde beklenmeyen hata:', err);
+    console.error('Genel istatistik servisinde hata:', err);
     return [];
   }
 };
