@@ -4,7 +4,7 @@ import {
   Shield, Target, Award, Flame, UserPlus, ShieldPlus,
   BarChart2, ArrowLeftRight, CheckCircle2,
   PieChart, Printer, Settings, RefreshCw, BookOpen, Save,
-  UserX, UserCheck, Trash2, Star, AlertCircle, Filter, CloudCheck, Zap
+  UserX, UserCheck, Trash2, Star, AlertCircle, Filter, CloudCheck, Undo2
 } from 'lucide-react';
 
 import { supabase } from './supabaseClient';
@@ -47,6 +47,9 @@ export default function App() {
   const [selectedPlayerId, setSelectedPlayerId] = useState(null);
   const [subOutPlayerId, setSubOutPlayerId] = useState(null);
   const [shots, setShots] = useState([]);
+
+  // ACTION HISTORY FOR UNDO FUNCTIONALITY (GERİ ALMA GEÇMİŞİ)
+  const [actionHistory, setActionHistory] = useState([]);
 
   // AUTO SAVE INDICATOR STATE
   const [lastSavedTime, setLastSavedTime] = useState(null);
@@ -300,6 +303,7 @@ export default function App() {
       setHomeScore(0);
       setAwayScore(0);
       setShots([]);
+      setActionHistory([]);
       
       const firstCourtPlayer = Object.values(initialStats).find(p => p.teamType === 'home' && p.isOnCourt)?.id;
       setSelectedPlayerId(firstCourtPlayer || null);
@@ -312,8 +316,24 @@ export default function App() {
     }
   };
 
+  // İSTATİSTİK EKLEME VE GEÇMİŞE KAYDETME (GERİ ALMA DESTEKLİ)
   const handleStat = (type, ptsValue = 0, isMake = true) => {
     if (!selectedPlayerId || !matchStats[selectedPlayerId]) return;
+
+    const player = matchStats[selectedPlayerId];
+
+    // Geri alma işlemi için durumun kopyasını sakla
+    setActionHistory(prev => [
+      ...prev,
+      {
+        playerId: selectedPlayerId,
+        type,
+        ptsValue,
+        isMake,
+        teamType: player.teamType,
+        timestamp: Date.now()
+      }
+    ]);
 
     setMatchStats(prev => {
       const updatedPlayer = { ...prev[selectedPlayerId] };
@@ -339,11 +359,54 @@ export default function App() {
       return { ...prev, [selectedPlayerId]: updatedPlayer };
     });
 
-    const player = matchStats[selectedPlayerId];
     if (type === 'PTS' && isMake) {
       if (player.teamType === 'home') setHomeScore(s => s + ptsValue);
       else setAwayScore(s => s + ptsValue);
     }
+  };
+
+  // SON İŞLEMİ GERİ ALMA (UNDO / DÜZELTME)
+  const handleUndo = () => {
+    if (actionHistory.length === 0) {
+      showNotification("Geri alınacak bir işlem bulunamadı!");
+      return;
+    }
+
+    const lastAction = actionHistory[actionHistory.length - 1];
+
+    setMatchStats(prev => {
+      if (!prev[lastAction.playerId]) return prev;
+      const updatedPlayer = { ...prev[lastAction.playerId] };
+
+      if (lastAction.type === 'PTS') {
+        updatedPlayer.pts = Math.max(0, updatedPlayer.pts - lastAction.ptsValue);
+        if (lastAction.ptsValue === 3) {
+          updatedPlayer.pm3 = Math.max(0, updatedPlayer.pm3 - (lastAction.isMake ? 1 : 0));
+          updatedPlayer.pa3 = Math.max(0, updatedPlayer.pa3 - 1);
+        } else if (lastAction.ptsValue === 2) {
+          updatedPlayer.fgm = Math.max(0, updatedPlayer.fgm - (lastAction.isMake ? 1 : 0));
+          updatedPlayer.fga = Math.max(0, updatedPlayer.fga - 1);
+        } else if (lastAction.ptsValue === 1) {
+          updatedPlayer.ftm = Math.max(0, updatedPlayer.ftm - (lastAction.isMake ? 1 : 0));
+          updatedPlayer.fta = Math.max(0, updatedPlayer.fta - 1);
+        }
+      } else if (lastAction.type === 'REB') updatedPlayer.reb = Math.max(0, updatedPlayer.reb - 1);
+      else if (lastAction.type === 'AST') updatedPlayer.ast = Math.max(0, updatedPlayer.ast - 1);
+      else if (lastAction.type === 'STL') updatedPlayer.stl = Math.max(0, updatedPlayer.stl - 1);
+      else if (lastAction.type === 'BLK') updatedPlayer.blk = Math.max(0, updatedPlayer.blk - 1);
+      else if (lastAction.type === 'TOV') updatedPlayer.tov = Math.max(0, updatedPlayer.tov - 1);
+      else if (lastAction.type === 'PF') updatedPlayer.pf = Math.max(0, updatedPlayer.pf - 1);
+
+      return { ...prev, [lastAction.playerId]: updatedPlayer };
+    });
+
+    if (lastAction.type === 'PTS' && lastAction.isMake) {
+      if (lastAction.teamType === 'home') setHomeScore(s => Math.max(0, s - lastAction.ptsValue));
+      else setAwayScore(s => Math.max(0, s - lastAction.ptsValue));
+    }
+
+    setActionHistory(prev => prev.slice(0, -1));
+    showNotification("Son işlem geri alındı ✓", false);
   };
 
   const handleCourtClick = (e) => {
@@ -669,23 +732,39 @@ export default function App() {
                     </div>
                   )}
 
-                  {/* AKSİYON BUTONLARI */}
+                  {/* AKSİYON VE GERİ ALMA/DÜZELTME BUTONLARI */}
                   {selectedPlayer && (
-                    <div className="bg-gray-900 rounded-2xl p-3 border-2 border-orange-500/30 shadow-2xl space-y-2">
+                    <div className="bg-gray-900 rounded-2xl p-3 border-2 border-orange-500/30 shadow-2xl space-y-2.5">
                       <div className="flex justify-between items-center pb-1.5 border-b border-gray-800">
                         <div className="flex items-center gap-1.5">
                           <span className="bg-orange-500 text-black font-black text-xs px-2 py-0.5 rounded-md">#{selectedPlayer.number}</span>
-                          <span className="text-xs font-black text-white truncate max-w-[120px]">{selectedPlayer.name}</span>
+                          <span className="text-xs font-black text-white truncate max-w-[110px]">{selectedPlayer.name}</span>
                         </div>
                         <span className="text-[11px] font-mono font-bold text-orange-400">{selectedPlayer.pts} Sayı | {selectedPlayer.reb} Reb | {selectedPlayer.ast} Ast</span>
                       </div>
 
+                      {/* SON İŞLEMİ GERİ AL / DÜZELT BUTONU */}
+                      <button 
+                        onClick={handleUndo}
+                        disabled={actionHistory.length === 0}
+                        className={`w-full font-black py-2 rounded-xl text-xs flex items-center justify-center gap-1.5 shadow-md transition active:scale-95 ${
+                          actionHistory.length > 0 
+                            ? 'bg-rose-950/80 hover:bg-rose-900 text-rose-300 border border-rose-700/80' 
+                            : 'bg-gray-800/40 text-gray-600 border border-gray-800 cursor-not-allowed'
+                        }`}
+                      >
+                        <Undo2 size={14} /> 
+                        {actionHistory.length > 0 ? `Son İşlemi Geri Al (${actionHistory.length} İşlem Yapıldı)` : 'Geri Alınacak İşlem Yok'}
+                      </button>
+
+                      {/* SAYI BUTONLARI */}
                       <div className="grid grid-cols-3 gap-2">
                         <button onClick={() => handleStat('PTS', 2, true)} className="bg-gradient-to-b from-emerald-600 to-emerald-800 hover:from-emerald-500 hover:to-emerald-700 active:scale-95 text-white font-black py-3 rounded-xl text-sm shadow-lg border border-emerald-400/30 flex items-center justify-center gap-1">+2 Sayı</button>
                         <button onClick={() => handleStat('PTS', 3, true)} className="bg-gradient-to-b from-emerald-600 to-emerald-800 hover:from-emerald-500 hover:to-emerald-700 active:scale-95 text-white font-black py-3 rounded-xl text-sm shadow-lg border border-emerald-400/30 flex items-center justify-center gap-1">+3 Sayı</button>
                         <button onClick={() => handleStat('PTS', 1, true)} className="bg-gradient-to-b from-emerald-700 to-emerald-900 hover:from-emerald-600 hover:to-emerald-800 active:scale-95 text-emerald-200 font-bold py-3 rounded-xl text-xs shadow-lg border border-emerald-500/20 flex items-center justify-center gap-1">+1 Serbest</button>
                       </div>
 
+                      {/* İSTATİSTİK BUTONLARI */}
                       <div className="grid grid-cols-3 gap-2 pt-1">
                         <button onClick={() => handleStat('REB')} className="bg-gray-800 hover:bg-gray-700 active:scale-95 border border-gray-700 text-gray-100 py-2.5 rounded-xl text-xs font-bold flex items-center justify-center gap-1 shadow-md"><Shield size={14} className="text-blue-400" /> REB</button>
                         <button onClick={() => handleStat('AST')} className="bg-gray-800 hover:bg-gray-700 active:scale-95 border border-gray-700 text-gray-100 py-2.5 rounded-xl text-xs font-bold flex items-center justify-center gap-1 shadow-md"><Target size={14} className="text-amber-400" /> AST</button>
@@ -697,9 +776,19 @@ export default function App() {
                     </div>
                   )}
 
-                  {/* YARI SAHA ŞUT HARİTASI GÖRSELİ */}
+                  {/* YARI SAHA ŞUT HARİTASI GÖRSELİ VE ŞUT SİLME */}
                   <div className="bg-gray-900 border border-gray-800 rounded-2xl p-2.5 space-y-1.5">
-                    <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider block">Saha Şut Haritası (İşaretlemek için dokun)</span>
+                    <div className="flex justify-between items-center">
+                      <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider block">Saha Şut Haritası</span>
+                      {shots.length > 0 && (
+                        <button 
+                          onClick={() => setShots(prev => prev.slice(0, -1))}
+                          className="text-[9px] text-rose-400 font-bold underline hover:text-rose-300"
+                        >
+                          Son Şutu Haritadan Sil
+                        </button>
+                      )}
+                    </div>
                     <div className="relative w-full aspect-[4/3] bg-orange-950/20 border-2 border-orange-500/40 rounded-xl overflow-hidden cursor-pointer active:opacity-90" onClick={handleCourtClick}>
                       <svg className="absolute inset-0 w-full h-full stroke-orange-500/30 fill-none" viewBox="0 0 100 75">
                         <rect x="35" y="0" width="30" height="30" strokeWidth="1" />
@@ -864,7 +953,6 @@ export default function App() {
                     <button onClick={() => setStatsTeamFilter('away')} className={`flex-1 py-1 rounded-lg font-bold transition ${statsTeamFilter === 'away' ? 'bg-orange-600 text-white' : 'text-gray-400 hover:text-white'}`}>{awayTeam?.name || 'Rakip'}</button>
                   </div>
 
-                  {/* BELİRGİN VE DEV PIR VERİMLİLİK TABLOSU */}
                   <div className="overflow-x-auto bg-gray-900 border border-gray-800 rounded-xl">
                     <table className="w-full text-left text-xs text-gray-300">
                       <thead className="bg-gray-800/90 text-gray-400 uppercase text-[9px] border-b border-gray-800">
@@ -906,7 +994,6 @@ export default function App() {
                                 <div className="text-[8px] text-gray-500">{p.teamType === 'home' ? 'EV' : 'RAKİP'} • {p.position}</div>
                               </td>
 
-                              {/* DEV VE BELİRGİN PIR DEĞERİ */}
                               <td className="p-1 text-center">
                                 <span className={`inline-block min-w-[28px] py-0.5 px-1.5 rounded-md font-mono font-black text-sm shadow-md ${
                                   pir >= 15 ? 'bg-amber-500 text-black' :
