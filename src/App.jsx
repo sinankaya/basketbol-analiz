@@ -1135,4 +1135,118 @@ export default function App() {
                     ) : generalStatsList.length === 0 ? (
                       <div className="p-4 text-center text-xs text-gray-500">Seçili filtrelere ait kayıtlı maç istatistiği bulunamadı.</div>
                     ) : (
-                      <table className="w-full text-left text-xs text-gray-3
+                      <table className="w-full text-left text-xs text-gray-300">
+                        <thead className="bg-gray-800/80 text-gray-400 uppercase text-[9px]">
+                          <tr>
+                            <th className="p-2">Oyuncu</th>
+                            <th className="p-1 text-center">OM</th>
+                            <th className="p-1 text-center">PTS</th>
+                            <th className="p-1 text-center text-amber-400 font-bold">PIR</th>
+                            <th className="p-1 text-center">REB</th>
+                            <th className="p-1 text-center">AST</th>
+                            <th className="p-1 text-center">STL</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-gray-800">
+                          {generalStatsList.map(p => (
+                            <tr key={p.id} className="hover:bg-gray-800/50">
+                              <td className="p-2 font-medium">
+                                <div className="font-bold text-white">#{p.number} {p.name}</div>
+                                <div className="text-[8px] text-gray-500">{p.position}</div>
+                              </td>
+                              <td className="p-1 text-center font-mono text-gray-400">{p.gp}</td>
+                              <td className="p-1 text-center font-bold text-orange-400">{p.pts}</td>
+                              <td className="p-1 text-center font-black text-amber-400 text-xs">{calcPIR(p)}</td>
+                              <td className="p-1 text-center">{p.reb}</td>
+                              <td className="p-1 text-center">{p.ast}</td>
+                              <td className="p-1 text-center">{p.stl}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* TAB 4: GLOSSARY */}
+          {activeTab === 'settings' && (
+            <div className="space-y-3">
+              <div className="bg-gray-900 border border-gray-800 rounded-xl p-3 space-y-2">
+                <span className="text-xs font-bold text-orange-400 uppercase tracking-wider flex items-center gap-1 border-b border-gray-800 pb-1.5">
+                  <BookOpen size={14} /> İstatistik Terimleri
+                </span>
+
+                <div className="grid grid-cols-2 gap-2 text-[11px] text-gray-300">
+                  <div className="bg-gray-800/50 p-1.5 rounded border border-gray-700/40"><strong className="text-orange-400">OM (Oynanan Maç):</strong> Toplam maç sayısı.</div>
+                  <div className="bg-gray-800/50 p-1.5 rounded border border-gray-700/40"><strong className="text-orange-400">PTS:</strong> Atılan toplam sayı.</div>
+                  <div className="bg-gray-800/50 p-1.5 rounded border border-gray-700/40"><strong className="text-blue-400">REB:</strong> Alınan toplam ribaund.</div>
+                  <div className="bg-gray-800/50 p-1.5 rounded border border-gray-700/40"><strong className="text-amber-400">AST:</strong> Sayı pası (Asist).</div>
+                  <div className="bg-gray-800/50 p-1.5 rounded border border-gray-700/40"><strong className="text-emerald-400">STL:</strong> Top çalma.</div>
+                  <div className="bg-gray-800/50 p-1.5 rounded border border-gray-700/40"><strong className="text-purple-400">BLK:</strong> Blok sayısı.</div>
+                  <div className="bg-gray-800/50 p-1.5 rounded border border-gray-700/40"><strong className="text-rose-400">TOV:</strong> Top kaybı.</div>
+                  <div className="bg-gray-800/50 p-1.5 rounded border border-gray-700/40"><strong className="text-amber-300">PIR:</strong> Performans İndeksi (Verimlilik).</div>
+                </div>
+              </div>
+
+              {/* SEPARATING DIVIDER */}
+              <div className="flex items-center my-3">
+                <div className="flex-1 border-t border-gray-800"></div>
+                <span className="px-3 text-[10px] font-black text-orange-500 uppercase tracking-widest bg-gray-900 border border-gray-800 rounded-full py-0.5">
+                  🏀 SAHA İÇİ OYUNCU ROLLERİ
+                </span>
+                <div className="flex-1 border-t border-gray-800"></div>
+              </div>
+
+              {/* OYUNCU POZİSYON & ROL AÇIKLAMALARI */}
+              <div className="bg-gray-900 border border-gray-800 rounded-xl p-3 space-y-2">
+                <span className="text-xs font-bold text-orange-400 uppercase tracking-wider flex items-center gap-1 border-b border-gray-800 pb-1.5">
+                  <Users size={14} /> Pozisyon Rehberi
+                </span>
+
+                <div className="space-y-1.5 text-[11px] text-gray-300">
+                  <div className="bg-gray-800/50 p-2 rounded border border-gray-700/40">
+                    <strong className="text-orange-400 block font-bold">1 - PG (Point Guard / Oyun Kurucu):</strong>
+                    Sahanın lideri, hücum organizasyonunu yönetir, pas dağıtır ve maçın temposunu belirler.
+                  </div>
+
+                  <div className="bg-gray-800/50 p-2 rounded border border-gray-700/40">
+                    <strong className="text-orange-400 block font-bold">2 - SG (Shooting Guard / Şutör Gard):</strong>
+                    Takımın birincil dış skor opsiyonudur. Dış şut yeteneği, perde çıkışı skor bulma ve kanat savunması ana görevidir.
+                  </div>
+
+                  <div className="bg-gray-800/50 p-2 rounded border border-gray-700/40">
+                    <strong className="text-orange-400 block font-bold">3 - SF (Small Forward / Kısa Forvet):</strong>
+                    Çok yönlü oyuncudur. Hem içeriden hem dışarıdan skor üretebilir, hızlı hücumu koşar ve rakip kanatları savunur.
+                  </div>
+
+                  <div className="bg-gray-800/50 p-2 rounded border border-gray-700/40">
+                    <strong className="text-orange-400 block font-bold">4 - PF (Power Forward / Uzun Forvet):</strong>
+                    Pota altı mücadelesi verir, orta mesafe/dış şut katkısı sunar, perdeleme yapar ve ribaund toplar.
+                  </div>
+
+                  <div className="bg-gray-800/50 p-2 rounded border border-gray-700/40">
+                    <strong className="text-orange-400 block font-bold">5 - C (Center / Pivot):</strong>
+                    Boyalı alanın koruyucusudur. Çember savunması (blok), savunma ve hücum ribaundları ile çember etrafı bitiricilik temel rolüdür.
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
+        </main>
+
+        {/* BOTTOM NAV */}
+        <nav className="absolute bottom-0 inset-x-0 bg-gray-950/95 border-t border-gray-800 flex justify-around p-2 z-30">
+          <button onClick={() => setActiveTab('live')} className={`flex flex-col items-center text-[9px] font-bold ${activeTab === 'live' ? 'text-orange-500' : 'text-gray-500'}`}><Activity size={16} /> Canlı Maç</button>
+          <button onClick={() => setActiveTab('roster')} className={`flex flex-col items-center text-[9px] font-bold ${activeTab === 'roster' ? 'text-orange-500' : 'text-gray-500'}`}><Users size={16} /> Kadro</button>
+          <button onClick={() => setActiveTab('stats')} className={`flex flex-col items-center text-[9px] font-bold ${activeTab === 'stats' ? 'text-orange-500' : 'text-gray-500'}`}><BarChart2 size={16} /> İstatistik</button>
+          <button onClick={() => setActiveTab('settings')} className={`flex flex-col items-center text-[9px] font-bold ${activeTab === 'settings' ? 'text-orange-500' : 'text-gray-500'}`}><Settings size={16} /> Sözlük</button>
+        </nav>
+
+      </div>
+    </div>
+  );
+}
