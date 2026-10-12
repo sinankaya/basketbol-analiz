@@ -4,7 +4,7 @@ import {
   Shield, Target, Award, Flame, UserPlus, ShieldPlus,
   BarChart2, ArrowLeftRight, CheckCircle2,
   PieChart, Printer, Settings, RefreshCw, BookOpen, Save,
-  UserX, UserCheck, Trash2, Star, AlertCircle, Filter, CloudCheck, Undo2
+  UserX, UserCheck, Trash2, Star, AlertCircle, Filter, CloudCheck, Undo2, Square
 } from 'lucide-react';
 
 import { supabase } from './supabaseClient';
@@ -51,7 +51,8 @@ export default function App() {
   // ACTION HISTORY FOR UNDO
   const [actionHistory, setActionHistory] = useState([]);
 
-  // AUTO SAVE INDICATOR STATE
+  // AUTO SAVE TOGGLE & INDICATOR STATE
+  const [isAutoSaveEnabled, setIsAutoSaveEnabled] = useState(true);
   const [lastSavedTime, setLastSavedTime] = useState(null);
 
   // STATS TABS & FILTERS
@@ -93,10 +94,10 @@ export default function App() {
     }
   }, [statsViewMode, generalSelectedTeamId, generalMatchTypeFilter]);
 
-  // AUTOMATIC PERIODIC SAVE EFFECT (HER 15 SANİYEDE BİR OTO-KAYIT)
+  // AUTOMATIC PERIODIC SAVE EFFECT (DURDURMA / BAŞLATMA DESTEKLİ)
   useEffect(() => {
     let autoSaveTimer;
-    if (isMatchStarted && activeMatchId) {
+    if (isMatchStarted && activeMatchId && isAutoSaveEnabled) {
       autoSaveTimer = setInterval(async () => {
         await saveMatchStatsDB(activeMatchId, Object.values(matchStats), homeScore, awayScore);
         const now = new Date();
@@ -104,7 +105,7 @@ export default function App() {
       }, 15000);
     }
     return () => clearInterval(autoSaveTimer);
-  }, [isMatchStarted, activeMatchId, matchStats, homeScore, awayScore]);
+  }, [isMatchStarted, activeMatchId, isAutoSaveEnabled, matchStats, homeScore, awayScore]);
 
   const loadTeamsData = async () => {
     try {
@@ -131,7 +132,7 @@ export default function App() {
       setGeneralStatsList(data || []);
     } catch (err) {
       console.error("Genel istatistikler yüklenemedi:", err);
-    } finally {
+    } fontALLY {
       setGeneralLoading(false);
     }
   };
@@ -304,6 +305,7 @@ export default function App() {
       setAwayScore(0);
       setShots([]);
       setActionHistory([]);
+      setIsAutoSaveEnabled(true);
       
       const firstCourtPlayer = Object.values(initialStats).find(p => p.teamType === 'home' && p.isOnCourt)?.id;
       setSelectedPlayerId(firstCourtPlayer || null);
@@ -313,6 +315,30 @@ export default function App() {
       showNotification("Maç başlatıldı! Otomatik kayıt aktif.", false);
     } catch (err) {
       showNotification('Maç başlatılırken hata oluştu.');
+    }
+  };
+
+  // MAÇI BİTİRME VE SON KAYIT
+  const finishMatch = async () => {
+    if (!window.confirm("Maçı bitirmek ve tüm istatistikleri kaydedip sonlandırmak istediğinize emin misiniz?")) return;
+
+    try {
+      setIsRunning(false);
+      
+      // Tüm verileri son kez veritabanına kaydet
+      if (activeMatchId) {
+        await saveMatchStatsDB(activeMatchId, Object.values(matchStats), homeScore, awayScore);
+      }
+
+      setIsMatchStarted(false);
+      setActiveMatchId(null);
+      setHomeStartingFive([]);
+      setAwayStartingFive([]);
+      setMatchStats({});
+      setActionHistory([]);
+      showNotification("Maç başarıyla tamamlandı ve tüm veriler veritabanına kaydedildi! 🏆", false);
+    } catch (err) {
+      showNotification("Maç sonlandırılırken hata oluştu.");
     }
   };
 
@@ -615,7 +641,7 @@ export default function App() {
                 </div>
               ) : (
                 <>
-                  {/* TAKIM SEÇİM VE OTOMATİK KAYIT BİLGİSİ */}
+                  {/* TAKIM SEÇİM VE OTOMATİK KAYIT DURDURMA / BAŞLATMA DÜĞMESİ */}
                   <div className="flex justify-between items-center bg-gray-950 p-1 rounded-xl border border-gray-800 gap-1.5">
                     <div className="flex flex-1 gap-1">
                       <button 
@@ -632,10 +658,21 @@ export default function App() {
                       </button>
                     </div>
 
-                    <div className="flex items-center gap-1 bg-emerald-950/80 border border-emerald-800/60 px-2.5 py-1 rounded-lg text-[10px] font-extrabold text-emerald-400">
-                      <Save size={12} className="animate-pulse" />
-                      <span>{lastSavedTime ? `Oto-Kayıt: ${lastSavedTime}` : 'Oto-Kayıt Aktif'}</span>
-                    </div>
+                    {/* OTO-KAYIT TOGGLE BUTONU */}
+                    <button 
+                      onClick={() => {
+                        setIsAutoSaveEnabled(!isAutoSaveEnabled);
+                        showNotification(isAutoSaveEnabled ? "Otomatik kayıt DURDURULDU" : "Otomatik kayıt BAŞLATILDI", !isAutoSaveEnabled);
+                      }}
+                      className={`flex items-center gap-1 px-2.5 py-1 rounded-lg text-[10px] font-extrabold border transition ${
+                        isAutoSaveEnabled 
+                          ? 'bg-emerald-950/80 border-emerald-800/60 text-emerald-400 hover:bg-emerald-900' 
+                          : 'bg-amber-950/80 border-amber-800/60 text-amber-400 hover:bg-amber-900'
+                      }`}
+                    >
+                      <Save size={12} className={isAutoSaveEnabled ? 'animate-pulse' : ''} />
+                      <span>{isAutoSaveEnabled ? (lastSavedTime ? `Oto Kayıt: ${lastSavedTime}` : 'Oto Kayıt: Aktif') : 'Oto Kayıt: Durduruldu'}</span>
+                    </button>
                   </div>
 
                   {/* SAHADAKİ OYUNCULAR (5) */}
@@ -882,6 +919,16 @@ export default function App() {
                         </div>
                       ))}
                     </div>
+                  </div>
+
+                  {/* MAÇI BİTİR BUTONU */}
+                  <div className="pt-2">
+                    <button 
+                      onClick={finishMatch} 
+                      className="w-full bg-rose-900/80 hover:bg-rose-800 border-2 border-rose-600 text-white font-black py-3 rounded-2xl text-xs flex items-center justify-center gap-2 shadow-xl active:scale-95 transition"
+                    >
+                      <Square size={14} className="fill-white" /> Maçı Bitir & Tüm İstatistikleri Kaydet
+                    </button>
                   </div>
                 </>
               )}
