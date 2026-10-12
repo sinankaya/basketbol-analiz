@@ -4,7 +4,7 @@ import {
   Shield, Target, Award, Flame, UserPlus, ShieldPlus,
   BarChart2, ArrowLeftRight, CheckCircle2,
   Settings, RefreshCw, BookOpen, Save,
-  UserX, UserCheck, Trash2, Star, AlertCircle, Filter, Undo2, Square, Plus, Minus, UserCheck2, Hash
+  UserX, UserCheck, Trash2, Star, AlertCircle, Filter, Undo2, Square, UserCheck2, Hash
 } from 'lucide-react';
 
 import { supabase } from './supabaseClient';
@@ -50,7 +50,6 @@ export default function App() {
 
   const [selectedPlayerId, setSelectedPlayerId] = useState(null);
   const [subOutPlayerId, setSubOutPlayerId] = useState(null);
-  const [shots, setShots] = useState([]);
 
   // ACTION HISTORY FOR UNDO
   const [actionHistory, setActionHistory] = useState([]);
@@ -313,12 +312,11 @@ export default function App() {
       setMatchStats(initialStats);
       setHomeScore(0);
       setAwayScore(0);
-      setShots([]);
       setActionHistory([]);
       setIsAutoSaveEnabled(true);
       
-      const firstPlayer = Object.keys(initialStats)[0];
-      setSelectedPlayerId(firstPlayer ? parseInt(firstPlayer) : null);
+      const firstPlayerKey = Object.keys(initialStats)[0];
+      setSelectedPlayerId(firstPlayerKey ? parseInt(firstPlayerKey) : null);
 
       setIsMatchStarted(true);
       setActiveTab('live');
@@ -507,7 +505,7 @@ export default function App() {
                     <p className="text-[10px] text-gray-400">İstatistik tutma modunu seçip maçı başlatın</p>
                   </div>
 
-                  {/* 1. MOD SEÇİM BUTONLARI */}
+                  {/* MOD SEÇİM BUTONLARI */}
                   <div className="grid grid-cols-3 gap-1.5 bg-gray-950 p-1.5 rounded-xl border border-gray-700">
                     <button 
                       onClick={() => setTrackingMode('full')}
@@ -651,8 +649,6 @@ export default function App() {
                 </div>
               ) : (
                 <>
-                  {/* CANLI EKRANLAR MODA GÖRE DEĞİŞİR */}
-
                   {/* OTO-KAYIT TOGGLE */}
                   <div className="flex justify-between items-center bg-gray-950 p-1 rounded-xl border border-gray-800 gap-1.5">
                     {trackingMode !== 'scoreboard_only' && (
@@ -671,7 +667,7 @@ export default function App() {
                     </button>
                   </div>
 
-                  {/* CANLI EKRAN - EĞER SADECE SKOR MODUYSA */}
+                  {/* CANLI EKRAN - SADECE SKOR MODU */}
                   {trackingMode === 'scoreboard_only' ? (
                     <div className="bg-gray-900 rounded-2xl p-4 border-2 border-orange-500/30 shadow-2xl space-y-4">
                       <div className="text-center border-b border-gray-800 pb-2">
