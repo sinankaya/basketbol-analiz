@@ -879,13 +879,20 @@ export default function App() {
                         <div className="flex items-center gap-2">
                           <span className="font-extrabold text-orange-400 w-5">#{p.number}</span>
                           <div>
-                            <div className="font-bold text-white">{p.name} {p.status === 'injured' && <span className="text-[8px] bg-rose-900 text-rose-300 font-bold px-1 rounded">SAKAT</span>}</div>
+                            <div className="font-bold text-white flex items-center gap-1">
+                              {p.name}
+                              {p.status === 'injured' && <span className="text-[8px] bg-rose-900 text-rose-300 font-bold px-1 rounded">SAKAT</span>}
+                            </div>
                             <div className="text-[8px] text-gray-400">{p.position}</div>
                           </div>
                         </div>
                         <div className="flex items-center gap-1">
-                          <button onClick={() => handleToggleStatus(p)} className="p-1.5 text-rose-400 hover:text-rose-300">{p.status === 'injured' ? <UserCheck size={14} /> : <UserX size={14} /></button>
-                          <button onClick={() => handleDeletePlayer(p.id)} className="p-1.5 text-gray-500 hover:text-rose-400"><Trash2 size={14} /></button>
+                          <button onClick={() => handleToggleStatus(p)} className="p-1.5 text-rose-400 hover:text-rose-300">
+                            {p.status === 'injured' ? <UserCheck size={14} /> : <UserX size={14} />}
+                          </button>
+                          <button onClick={() => handleDeletePlayer(p.id)} className="p-1.5 text-gray-500 hover:text-rose-400">
+                            <Trash2 size={14} />
+                          </button>
                         </div>
                       </div>
                     ))}
@@ -898,77 +905,4 @@ export default function App() {
                 <form onSubmit={handleAddPlayer} className="space-y-2">
                   <div className="grid grid-cols-3 gap-2">
                     <input type="text" placeholder="Ad Soyad" value={newPlayer.name} onChange={e => setNewPlayer({...newPlayer, name: e.target.value})} className="bg-gray-900 border border-gray-700 text-xs text-white p-2 rounded col-span-2" required />
-                    <input type="number" placeholder="Forma #" value={newPlayer.number} onChange={e => setNewPlayer({...newPlayer, number: e.target.value})} className="bg-gray-900 border border-gray-700 text-xs text-white p-2 rounded" required />
-                  </div>
-                  <button type="submit" className="w-full bg-emerald-600 text-white font-bold py-2 rounded-lg text-xs">Oyuncuyu Kaydet</button>
-                </form>
-              </div>
-            </div>
-          )}
-
-          {/* TAB 3: STATS */}
-          {activeTab === 'stats' && (
-            <div className="space-y-3">
-              <div className="flex bg-gray-950 p-1 rounded-xl border border-gray-800">
-                <button onClick={() => setStatsViewMode('match')} className={`flex-1 py-1.5 rounded-lg text-xs font-bold transition ${statsViewMode === 'match' ? 'bg-orange-600 text-white' : 'text-gray-400'}`}>Maç İstatistiği</button>
-                <button onClick={() => setStatsViewMode('general')} className={`flex-1 py-1.5 rounded-lg text-xs font-bold transition ${statsViewMode === 'general' ? 'bg-orange-600 text-white' : 'text-gray-400'}`}>Genel İstatistikler</button>
-              </div>
-
-              <div className="overflow-x-auto bg-gray-900 border border-gray-800 rounded-xl">
-                <table className="w-full text-left text-xs text-gray-300">
-                  <thead className="bg-gray-800/90 text-gray-400 uppercase text-[9px] border-b border-gray-800">
-                    <tr>
-                      <th className="p-2">Oyuncu</th>
-                      <th className="p-1 text-center font-black text-amber-400">PIR</th>
-                      <th className="p-1 text-center">PTS</th>
-                      <th className="p-1 text-center">REB</th>
-                      <th className="p-1 text-center">AST</th>
-                      <th className="p-1 text-center">TOV</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-gray-800">
-                    {filteredBoxScore.map(p => (
-                      <tr key={p.id}>
-                        <td className="p-2 font-medium">#{p.number} {p.name}</td>
-                        <td className="p-1 text-center font-bold text-amber-400">{calcPIR(p)}</td>
-                        <td className="p-1 text-center font-bold text-orange-400">{p.pts}</td>
-                        <td className="p-1 text-center">{p.reb}</td>
-                        <td className="p-1 text-center">{p.ast}</td>
-                        <td className="p-1 text-center text-rose-400">{p.tov}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          )}
-
-          {/* TAB 4: GLOSSARY */}
-          {activeTab === 'settings' && (
-            <div className="space-y-3">
-              <div className="bg-gray-900 border border-gray-800 rounded-xl p-3 space-y-2">
-                <span className="text-xs font-bold text-orange-400 uppercase tracking-wider flex items-center gap-1"><BookOpen size={14} /> Terimler</span>
-                <div className="grid grid-cols-2 gap-2 text-[11px] text-gray-300">
-                  <div className="bg-gray-800/50 p-1.5 rounded"><strong className="text-orange-400">PTS:</strong> Toplam sayı</div>
-                  <div className="bg-gray-800/50 p-1.5 rounded"><strong className="text-blue-400">REB:</strong> Ribaund</div>
-                  <div className="bg-gray-800/50 p-1.5 rounded"><strong className="text-amber-400">AST:</strong> Asist</div>
-                  <div className="bg-gray-800/50 p-1.5 rounded"><strong className="text-amber-300">PIR:</strong> Performans verimliliği</div>
-                </div>
-              </div>
-            </div>
-          )}
-
-        </main>
-
-        {/* BOTTOM NAV */}
-        <nav className="absolute bottom-0 inset-x-0 bg-gray-950/95 border-t border-gray-800 flex justify-around p-2 z-30">
-          <button onClick={() => setActiveTab('live')} className={`flex flex-col items-center text-[9px] font-bold ${activeTab === 'live' ? 'text-orange-500' : 'text-gray-500'}`}><Activity size={16} /> Canlı Maç</button>
-          <button onClick={() => setActiveTab('roster')} className={`flex flex-col items-center text-[9px] font-bold ${activeTab === 'roster' ? 'text-orange-500' : 'text-gray-500'}`}><Users size={16} /> Kadro</button>
-          <button onClick={() => setActiveTab('stats')} className={`flex flex-col items-center text-[9px] font-bold ${activeTab === 'stats' ? 'text-orange-500' : 'text-gray-500'}`}><BarChart2 size={16} /> İstatistik</button>
-          <button onClick={() => setActiveTab('settings')} className={`flex flex-col items-center text-[9px] font-bold ${activeTab === 'settings' ? 'text-orange-500' : 'text-gray-500'}`}><Settings size={16} /> Sözlük</button>
-        </nav>
-
-      </div>
-    </div>
-  );
-}
+                    <input type="number" placeholder
