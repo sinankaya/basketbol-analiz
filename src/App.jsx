@@ -94,7 +94,7 @@ export default function App() {
     }
   }, [statsViewMode, generalSelectedTeamId, generalMatchTypeFilter]);
 
-  // AUTOMATIC PERIODIC SAVE EFFECT (DURDURMA / BAŞLATMA DESTEKLİ)
+  // AUTOMATIC PERIODIC SAVE EFFECT
   useEffect(() => {
     let autoSaveTimer;
     if (isMatchStarted && activeMatchId && isAutoSaveEnabled) {
@@ -132,7 +132,7 @@ export default function App() {
       setGeneralStatsList(data || []);
     } catch (err) {
       console.error("Genel istatistikler yüklenemedi:", err);
-    } fontALLY {
+    } finally {
       setGeneralLoading(false);
     }
   };
@@ -324,8 +324,6 @@ export default function App() {
 
     try {
       setIsRunning(false);
-      
-      // Tüm verileri son kez veritabanına kaydet
       if (activeMatchId) {
         await saveMatchStatsDB(activeMatchId, Object.values(matchStats), homeScore, awayScore);
       }
@@ -414,7 +412,7 @@ export default function App() {
     }
   };
 
-  // SON İŞLEMİ GERİ ALMA (UNDO / DÜZELTME)
+  // SON İŞLEMİ GERİ ALMA (UNDO)
   const handleUndo = () => {
     if (actionHistory.length === 0) {
       showNotification("Geri alınacak bir işlem bulunamadı!");
@@ -422,7 +420,6 @@ export default function App() {
     }
 
     const lastAction = actionHistory[actionHistory.length - 1];
-
     handleStat(lastAction.type, lastAction.ptsValue, lastAction.isMake, true);
     setActionHistory(prev => prev.slice(0, -1));
     showNotification("Son işlem geri alındı ✓", false);
