@@ -858,11 +858,4 @@ export default function App() {
               <div className="bg-gray-800/40 p-3 rounded-xl border border-gray-800 space-y-2">
                 <span className="text-xs font-bold text-orange-400 uppercase tracking-wider flex items-center gap-1"><ShieldPlus size={14} /> Yeni Takım Ekle</span>
                 <form onSubmit={handleAddTeam} className="flex gap-2">
-                  <input type="text" placeholder="Takım Adı" value={newTeam.name} onChange={e => setNewTeam({...newTeam, name: e.target.value})} className="flex-1 bg-gray-900 border border-gray-700 text-xs text-white p-2 rounded-lg" required />
-                  <button type="submit" className="bg-orange-600 text-white font-bold px-3 py-2 rounded-lg text-xs">Ekle</button>
-                </form>
-              </div>
-
-              <div className="bg-gray-900 p-2.5 rounded-xl border border-gray-800 space-y-1.5">
-                <label className="text-[10px] font-bold text-gray-400 uppercase tracking-wider block">Yönetilecek Takım</label>
-                <select value={selectedRosterTeamId} onChange={e =>
+                  <input type="text" placeholder="Takım Adı" value={newTeam.name
