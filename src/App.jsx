@@ -865,44 +865,4 @@ export default function App() {
 
               <div className="bg-gray-900 p-2.5 rounded-xl border border-gray-800 space-y-1.5">
                 <label className="text-[10px] font-bold text-gray-400 uppercase tracking-wider block">Yönetilecek Takım</label>
-                <select value={selectedRosterTeamId} onChange={e => setSelectedRosterTeamId(e.target.value)} className="w-full bg-gray-950 border border-gray-700 text-xs text-white p-2 rounded-lg font-bold">
-                  {teams.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
-                </select>
-              </div>
-
-              {selectedRosterTeam && (
-                <div className="bg-gray-900 border border-gray-800 rounded-xl p-3 space-y-2">
-                  <span className="text-xs font-bold text-white flex items-center gap-1"><Users size={14} className="text-orange-400" /> Kadro ({selectedRosterTeam.players?.length || 0} Oyuncu)</span>
-                  <div className="space-y-1.5 max-h-52 overflow-y-auto">
-                    {(selectedRosterTeam.players || []).map(p => (
-                      <div key={p.id} className={`flex items-center justify-between p-2 rounded-lg border text-xs ${p.status === 'injured' ? 'bg-rose-950/20 border-rose-900/50 opacity-60' : 'bg-gray-800/60 border-gray-700/60'}`}>
-                        <div className="flex items-center gap-2">
-                          <span className="font-extrabold text-orange-400 w-5">#{p.number}</span>
-                          <div>
-                            <div className="font-bold text-white flex items-center gap-1">
-                              {p.name}
-                              {p.status === 'injured' && <span className="text-[8px] bg-rose-900 text-rose-300 font-bold px-1 rounded">SAKAT</span>}
-                            </div>
-                            <div className="text-[8px] text-gray-400">{p.position}</div>
-                          </div>
-                        </div>
-                        <div className="flex items-center gap-1">
-                          <button onClick={() => handleToggleStatus(p)} className="p-1.5 text-rose-400 hover:text-rose-300">
-                            {p.status === 'injured' ? <UserCheck size={14} /> : <UserX size={14} />}
-                          </button>
-                          <button onClick={() => handleDeletePlayer(p.id)} className="p-1.5 text-gray-500 hover:text-rose-400">
-                            <Trash2 size={14} />
-                          </button>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              <div className="bg-gray-800/80 p-3 rounded-xl border border-gray-700/80 space-y-2">
-                <span className="text-xs font-bold text-gray-200 uppercase tracking-wider flex items-center gap-1"><UserPlus size={14} className="text-orange-400" /> Oyuncu Ekle</span>
-                <form onSubmit={handleAddPlayer} className="space-y-2">
-                  <div className="grid grid-cols-3 gap-2">
-                    <input type="text" placeholder="Ad Soyad" value={newPlayer.name} onChange={e => setNewPlayer({...newPlayer, name: e.target.value})} className="bg-gray-900 border border-gray-700 text-xs text-white p-2 rounded col-span-2" required />
-                    <input type="number" placeholder
+                <select value={selectedRosterTeamId} onChange={e =>
