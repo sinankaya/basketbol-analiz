@@ -3,8 +3,8 @@ import {
   Trophy, Users, Activity, Play, Pause, RotateCcw, 
   Shield, Target, Award, Flame, UserPlus, ShieldPlus,
   BarChart2, ArrowLeftRight, CheckCircle2,
-  PieChart, Printer, Settings, RefreshCw, BookOpen, Save,
-  UserX, UserCheck, Trash2, Star, AlertCircle, Filter, CloudCheck, Undo2, Square
+  Settings, RefreshCw, BookOpen, Save,
+  UserX, UserCheck, Trash2, Star, AlertCircle, Filter, Undo2, Square, Plus, Minus, UserCheck2, Hash
 } from 'lucide-react';
 
 import { supabase } from './supabaseClient';
@@ -24,6 +24,9 @@ export default function App() {
   const [teams, setTeams] = useState([]);
   const [loading, setLoading] = useState(true);
 
+  // TRACKING MODE STATE ('full' | 'players' | 'scoreboard_only')
+  const [trackingMode, setTrackingMode] = useState('full');
+
   // MATCH STATE
   const [activeMatchId, setActiveMatchId] = useState(null);
   const [homeTeamId, setHomeTeamId] = useState(null);
@@ -32,9 +35,10 @@ export default function App() {
   const [activeTrackingTeam, setActiveTrackingTeam] = useState('home');
   const [isMatchStarted, setIsMatchStarted] = useState(false);
 
-  // STARTING 5 STATE
+  // SELECTION STATES FOR MODES
   const [homeStartingFive, setHomeStartingFive] = useState([]);
   const [awayStartingFive, setAwayStartingFive] = useState([]);
+  const [selectedCustomPlayerIds, setSelectedCustomPlayerIds] = useState([]);
 
   const [matchStats, setMatchStats] = useState({});
   const [homeScore, setHomeScore] = useState(0);
@@ -154,7 +158,6 @@ export default function App() {
     return `${m}:${s}`;
   };
 
-  // PIR (PERFORMANCE INDEX RATING) HESAPLAMA
   const calcPIR = (p) => {
     if (!p) return 0;
     return (p.pts + p.reb + p.ast + p.stl + p.blk) - ((p.fga || 0) - (p.fgm || 0) + (p.tov || 0));
@@ -182,6 +185,12 @@ export default function App() {
     });
   };
 
+  const toggleCustomPlayer = (playerId) => {
+    setSelectedCustomPlayerIds(prev => 
+      prev.includes(playerId) ? prev.filter(id => id !== playerId) : [...prev, playerId]
+    );
+  };
+
   const handleAddTeam = async (e) => {
     e.preventDefault();
     if (!newTeam.name) return;
@@ -190,7 +199,7 @@ export default function App() {
       await loadTeamsData();
       setSelectedRosterTeamId(created.id.toString());
       setNewTeam({ name: '', category: 'A Takım' });
-      showNotification("Yeni takım ve 15 varsayılan oyuncu eklendi!", false);
+      showNotification("Yeni takım eklendi!", false);
     } catch (err) {
       showNotification("Takım eklenirken hata oluştu.");
     }
@@ -207,7 +216,7 @@ export default function App() {
       );
 
       if (numberExists) {
-        showNotification(`HATA: ${targetTeam.name} takımında #${newPlayer.number} numaralı oyuncu zaten mevcut!`);
+        showNotification(`HATA: #${newPlayer.number} numaralı oyuncu zaten mevcut!`);
         return;
       }
     }
@@ -227,7 +236,7 @@ export default function App() {
       await addPlayerDB(payload);
       await loadTeamsData();
       setNewPlayer({ name: '', number: '', position: 'PG', height: '', weight: '', age: '' });
-      showNotification("Oyuncu başarıyla eklendi!", false);
+      showNotification("Oyuncu eklendi!", false);
     } catch (err) {
       showNotification("Oyuncu eklenirken hata oluştu.");
     }
@@ -240,7 +249,7 @@ export default function App() {
       await loadTeamsData();
       showNotification(`Oyuncu durumu ${newStatus === 'injured' ? 'Sakat' : 'Aktif'} yapıldı.`, false);
     } catch (err) {
-      showNotification("Oyuncu durumu güncellenemedi.");
+      showNotification("Güncellenemedi.");
     }
   };
 
@@ -249,9 +258,9 @@ export default function App() {
     try {
       await deletePlayerDB(playerId);
       await loadTeamsData();
-      showNotification("Oyuncu kadrodan silindi.", false);
+      showNotification("Oyuncu silindi.", false);
     } catch (err) {
-      showNotification("Oyuncu silinemedi.");
+      showNotification("Silinemedi.");
     }
   };
 
@@ -261,14 +270,16 @@ export default function App() {
       return;
     }
 
-    if (homeStartingFive.length !== 5) {
-      showNotification(`Ev Sahibi takımdan tam 5 oyuncu seçmelisiniz! (Şu an: ${homeStartingFive.length}/5)`);
-      return;
-    }
-
-    if (awayStartingFive.length !== 5) {
-      showNotification(`Rakip takımdan tam 5 oyuncu seçmelisiniz! (Şu an: ${awayStartingFive.length}/5)`);
-      return;
+    if (trackingMode === 'full') {
+      if (homeStartingFive.length !== 5 || awayStartingFive.length !== 5) {
+        showNotification("Her iki takımdan da tam 5 oyuncu seçmelisiniz!");
+        return;
+      }
+    } else if (trackingMode === 'players') {
+      if (selectedCustomPlayerIds.length === 0) {
+        showNotification("En az 1 oyuncu seçmelisiniz!");
+        return;
+      }
     }
 
     const homeTeam = teams.find(t => t.id === homeTeamId);
@@ -280,25 +291,24 @@ export default function App() {
 
       const initialStats = {};
 
-      (homeTeam.players || []).forEach(p => {
-        if (p.status === 'injured') return;
-        initialStats[p.id] = { 
-          ...p, 
-          teamType: 'home', 
-          isOnCourt: homeStartingFive.includes(p.id), 
-          pts: 0, reb: 0, ast: 0, stl: 0, blk: 0, tov: 0, pf: 0, fgm: 0, fga: 0, pm3: 0, pa3: 0, ftm: 0, fta: 0 
-        };
-      });
-
-      (awayTeam.players || []).forEach(p => {
-        if (p.status === 'injured') return;
-        initialStats[p.id] = { 
-          ...p, 
-          teamType: 'away', 
-          isOnCourt: awayStartingFive.includes(p.id), 
-          pts: 0, reb: 0, ast: 0, stl: 0, blk: 0, tov: 0, pf: 0, fgm: 0, fga: 0, pm3: 0, pa3: 0, ftm: 0, fta: 0 
-        };
-      });
+      if (trackingMode === 'full') {
+        (homeTeam.players || []).forEach(p => {
+          if (p.status === 'injured') return;
+          initialStats[p.id] = { ...p, teamType: 'home', isOnCourt: homeStartingFive.includes(p.id), pts: 0, reb: 0, ast: 0, stl: 0, blk: 0, tov: 0, pf: 0, fgm: 0, fga: 0, pm3: 0, pa3: 0, ftm: 0, fta: 0 };
+        });
+        (awayTeam.players || []).forEach(p => {
+          if (p.status === 'injured') return;
+          initialStats[p.id] = { ...p, teamType: 'away', isOnCourt: awayStartingFive.includes(p.id), pts: 0, reb: 0, ast: 0, stl: 0, blk: 0, tov: 0, pf: 0, fgm: 0, fga: 0, pm3: 0, pa3: 0, ftm: 0, fta: 0 };
+        });
+      } else if (trackingMode === 'players') {
+        const allPlayers = [...(homeTeam.players || []), ...(awayTeam.players || [])];
+        allPlayers.forEach(p => {
+          if (selectedCustomPlayerIds.includes(p.id)) {
+            const teamType = (homeTeam.players || []).some(hp => hp.id === p.id) ? 'home' : 'away';
+            initialStats[p.id] = { ...p, teamType, isOnCourt: true, pts: 0, reb: 0, ast: 0, stl: 0, blk: 0, tov: 0, pf: 0, fgm: 0, fga: 0, pm3: 0, pa3: 0, ftm: 0, fta: 0 };
+          }
+        });
+      }
 
       setMatchStats(initialStats);
       setHomeScore(0);
@@ -307,24 +317,23 @@ export default function App() {
       setActionHistory([]);
       setIsAutoSaveEnabled(true);
       
-      const firstCourtPlayer = Object.values(initialStats).find(p => p.teamType === 'home' && p.isOnCourt)?.id;
-      setSelectedPlayerId(firstCourtPlayer || null);
+      const firstPlayer = Object.keys(initialStats)[0];
+      setSelectedPlayerId(firstPlayer ? parseInt(firstPlayer) : null);
 
       setIsMatchStarted(true);
       setActiveTab('live');
-      showNotification("Maç başlatıldı! Otomatik kayıt aktif.", false);
+      showNotification("Maç başlatıldı!", false);
     } catch (err) {
       showNotification('Maç başlatılırken hata oluştu.');
     }
   };
 
-  // MAÇI BİTİRME VE SON KAYIT
   const finishMatch = async () => {
-    if (!window.confirm("Maçı bitirmek ve tüm istatistikleri kaydedip sonlandırmak istediğinize emin misiniz?")) return;
+    if (!window.confirm("Maçı bitirmek ve kaydedip sonlandırmak istiyor musunuz?")) return;
 
     try {
       setIsRunning(false);
-      if (activeMatchId) {
+      if (activeMatchId && trackingMode !== 'scoreboard_only') {
         await saveMatchStatsDB(activeMatchId, Object.values(matchStats), homeScore, awayScore);
       }
 
@@ -332,15 +341,15 @@ export default function App() {
       setActiveMatchId(null);
       setHomeStartingFive([]);
       setAwayStartingFive([]);
+      setSelectedCustomPlayerIds([]);
       setMatchStats({});
       setActionHistory([]);
-      showNotification("Maç başarıyla tamamlandı ve tüm veriler veritabanına kaydedildi! 🏆", false);
+      showNotification("Maç tamamlandı ve veriler kaydedildi! 🏆", false);
     } catch (err) {
       showNotification("Maç sonlandırılırken hata oluştu.");
     }
   };
 
-  // İSTATİSTİK EKLEME VEYA AZALTMA (PLUS / MINUS)
   const handleStat = (type, ptsValue = 0, isMake = true, isSubtract = false) => {
     if (!selectedPlayerId || !matchStats[selectedPlayerId]) return;
 
@@ -349,14 +358,7 @@ export default function App() {
     if (!isSubtract) {
       setActionHistory(prev => [
         ...prev,
-        {
-          playerId: selectedPlayerId,
-          type,
-          ptsValue,
-          isMake,
-          teamType: player.teamType,
-          timestamp: Date.now()
-        }
+        { playerId: selectedPlayerId, type, ptsValue, isMake, teamType: player.teamType, timestamp: Date.now() }
       ]);
     }
 
@@ -366,28 +368,14 @@ export default function App() {
       if (type === 'PTS') {
         if (isSubtract) {
           updatedPlayer.pts = Math.max(0, updatedPlayer.pts - ptsValue);
-          if (ptsValue === 3) {
-            updatedPlayer.pm3 = Math.max(0, updatedPlayer.pm3 - (isMake ? 1 : 0));
-            updatedPlayer.pa3 = Math.max(0, updatedPlayer.pa3 - 1);
-          } else if (ptsValue === 2) {
-            updatedPlayer.fgm = Math.max(0, updatedPlayer.fgm - (isMake ? 1 : 0));
-            updatedPlayer.fga = Math.max(0, updatedPlayer.fga - 1);
-          } else if (ptsValue === 1) {
-            updatedPlayer.ftm = Math.max(0, updatedPlayer.ftm - (isMake ? 1 : 0));
-            updatedPlayer.fta = Math.max(0, updatedPlayer.fta - 1);
-          }
+          if (ptsValue === 3) { updatedPlayer.pm3 = Math.max(0, updatedPlayer.pm3 - (isMake ? 1 : 0)); updatedPlayer.pa3 = Math.max(0, updatedPlayer.pa3 - 1); }
+          else if (ptsValue === 2) { updatedPlayer.fgm = Math.max(0, updatedPlayer.fgm - (isMake ? 1 : 0)); updatedPlayer.fga = Math.max(0, updatedPlayer.fga - 1); }
+          else if (ptsValue === 1) { updatedPlayer.ftm = Math.max(0, updatedPlayer.ftm - (isMake ? 1 : 0)); updatedPlayer.fta = Math.max(0, updatedPlayer.fta - 1); }
         } else {
           updatedPlayer.pts += ptsValue;
-          if (ptsValue === 3) {
-            updatedPlayer.pm3 += isMake ? 1 : 0;
-            updatedPlayer.pa3 += 1;
-          } else if (ptsValue === 2) {
-            updatedPlayer.fgm += isMake ? 1 : 0;
-            updatedPlayer.fga += 1;
-          } else if (ptsValue === 1) {
-            updatedPlayer.ftm += isMake ? 1 : 0;
-            updatedPlayer.fta += 1;
-          }
+          if (ptsValue === 3) { updatedPlayer.pm3 += isMake ? 1 : 0; updatedPlayer.pa3 += 1; }
+          else if (ptsValue === 2) { updatedPlayer.fgm += isMake ? 1 : 0; updatedPlayer.fga += 1; }
+          else if (ptsValue === 1) { updatedPlayer.ftm += isMake ? 1 : 0; updatedPlayer.fta += 1; }
         }
       } else if (type === 'REB') updatedPlayer.reb = isSubtract ? Math.max(0, updatedPlayer.reb - 1) : updatedPlayer.reb + 1;
       else if (type === 'AST') updatedPlayer.ast = isSubtract ? Math.max(0, updatedPlayer.ast - 1) : updatedPlayer.ast + 1;
@@ -407,12 +395,17 @@ export default function App() {
       }
     }
 
-    if (isSubtract) {
-      showNotification("İstatistik düşürüldü (-)", false);
+    if (isSubtract) showNotification("İstatistik düşürüldü (-)", false);
+  };
+
+  const handleDirectScore = (team, pts, isSubtract = false) => {
+    if (team === 'home') {
+      setHomeScore(s => isSubtract ? Math.max(0, s - pts) : s + pts);
+    } else {
+      setAwayScore(s => isSubtract ? Math.max(0, s - pts) : s + pts);
     }
   };
 
-  // SON İŞLEMİ GERİ ALMA (UNDO)
   const handleUndo = () => {
     if (actionHistory.length === 0) {
       showNotification("Geri alınacak bir işlem bulunamadı!");
@@ -423,29 +416,6 @@ export default function App() {
     handleStat(lastAction.type, lastAction.ptsValue, lastAction.isMake, true);
     setActionHistory(prev => prev.slice(0, -1));
     showNotification("Son işlem geri alındı ✓", false);
-  };
-
-  const handleCourtClick = (e) => {
-    if (!selectedPlayerId) {
-      showNotification('Lütfen önce sahadan bir oyuncu seçin!');
-      return;
-    }
-    const rect = e.currentTarget.getBoundingClientRect();
-    const x = Math.round(((e.clientX - rect.left) / rect.width) * 100);
-    const y = Math.round(((e.clientY - rect.top) / rect.height) * 100);
-
-    const is3pt = y > 55 || x < 15 || x > 85;
-    const shotVal = is3pt ? 3 : 2;
-    const made = window.confirm(`${is3pt ? '3 Sayılık' : '2 Sayılık'} Atış İSABETLİ mi?`);
-
-    setShots(prev => [...prev, {
-      id: Date.now(),
-      playerId: selectedPlayerId,
-      x, y, made,
-      type: is3pt ? '3PT' : '2PT'
-    }]);
-
-    handleStat('PTS', made ? shotVal : 0, made);
   };
 
   const executeSub = (benchPlayerId) => {
@@ -477,7 +447,10 @@ export default function App() {
     return true;
   });
 
-  const canStartMatch = homeStartingFive.length === 5 && awayStartingFive.length === 5;
+  const allAvailablePlayers = [
+    ...(homeTeam?.players || []).map(p => ({ ...p, teamName: homeTeam?.name, teamType: 'home' })),
+    ...(awayTeam?.players || []).map(p => ({ ...p, teamName: awayTeam?.name, teamType: 'away' }))
+  ];
 
   return (
     <div className="flex justify-center bg-gray-950 min-h-screen text-gray-100 font-sans antialiased">
@@ -530,11 +503,40 @@ export default function App() {
               {!isMatchStarted ? (
                 <div className="bg-gray-800/80 p-3.5 rounded-xl border border-gray-700 space-y-3">
                   <div className="text-center">
-                    <span className="text-xs font-bold text-orange-400 uppercase tracking-wider block">Yeni Maç & İlk 5 Seçimi</span>
-                    <p className="text-[10px] text-gray-400">Maçı başlatmak için her iki takımdan tam 5 oyuncu seçilmelidir.</p>
+                    <span className="text-xs font-bold text-orange-400 uppercase tracking-wider block">Yeni Maç Kurulumu</span>
+                    <p className="text-[10px] text-gray-400">İstatistik tutma modunu seçip maçı başlatın</p>
                   </div>
-                  
-                  <div className="space-y-2 text-left">
+
+                  {/* 1. MOD SEÇİM BUTONLARI */}
+                  <div className="grid grid-cols-3 gap-1.5 bg-gray-950 p-1.5 rounded-xl border border-gray-700">
+                    <button 
+                      onClick={() => setTrackingMode('full')}
+                      className={`py-2 px-1 rounded-lg text-[10px] font-black transition flex flex-col items-center gap-1 ${
+                        trackingMode === 'full' ? 'bg-orange-600 text-white shadow' : 'text-gray-400 hover:text-white'
+                      }`}
+                    >
+                      <Users size={14} /> Tam Maç (5'e 5)
+                    </button>
+                    <button 
+                      onClick={() => setTrackingMode('players')}
+                      className={`py-2 px-1 rounded-lg text-[10px] font-black transition flex flex-col items-center gap-1 ${
+                        trackingMode === 'players' ? 'bg-orange-600 text-white shadow' : 'text-gray-400 hover:text-white'
+                      }`}
+                    >
+                      <Target size={14} /> Belirli Oyuncular
+                    </button>
+                    <button 
+                      onClick={() => setTrackingMode('scoreboard_only')}
+                      className={`py-2 px-1 rounded-lg text-[10px] font-black transition flex flex-col items-center gap-1 ${
+                        trackingMode === 'scoreboard_only' ? 'bg-orange-600 text-white shadow' : 'text-gray-400 hover:text-white'
+                      }`}
+                    >
+                      <Hash size={14} /> Sadece Skor
+                    </button>
+                  </div>
+
+                  {/* TAKIM SEÇİMLERİ */}
+                  <div className="space-y-2 text-left pt-1">
                     <div>
                       <label className="text-[10px] text-gray-400 font-bold block mb-1">Maç Türü</label>
                       <select value={matchType} onChange={e => setMatchType(e.target.value)} className="w-full bg-gray-900 border border-gray-700 text-xs text-white p-2 rounded-lg font-bold">
@@ -560,370 +562,288 @@ export default function App() {
                     </div>
                   </div>
 
-                  {/* MANDATORY STARTING 5 SELECTION PANELS */}
-                  <div className="space-y-2 pt-2 border-t border-gray-700/80">
-                    <div className="bg-gray-900/90 p-2.5 rounded-lg border border-gray-700">
-                      <div className="flex justify-between items-center mb-1.5">
-                        <span className="text-[11px] font-bold text-orange-400">{homeTeam?.name} - İlk 5</span>
-                        <span className={`text-[10px] font-black px-1.5 py-0.5 rounded ${homeStartingFive.length === 5 ? 'bg-emerald-950 text-emerald-400 border border-emerald-800' : 'bg-amber-950 text-amber-400 border border-amber-800'}`}>
-                          {homeStartingFive.length}/5 Seçildi
+                  {/* MOD 1: TAM MAÇ (İLK 5 SEÇİMİ) */}
+                  {trackingMode === 'full' && (
+                    <div className="space-y-2 pt-2 border-t border-gray-700/80">
+                      <div className="bg-gray-900/90 p-2.5 rounded-lg border border-gray-700">
+                        <div className="flex justify-between items-center mb-1.5">
+                          <span className="text-[11px] font-bold text-orange-400">{homeTeam?.name} - İlk 5</span>
+                          <span className={`text-[10px] font-black px-1.5 py-0.5 rounded ${homeStartingFive.length === 5 ? 'bg-emerald-950 text-emerald-400 border border-emerald-800' : 'bg-amber-950 text-amber-400 border border-amber-800'}`}>
+                            {homeStartingFive.length}/5 Seçildi
+                          </span>
+                        </div>
+                        <div className="grid grid-cols-2 gap-1 max-h-32 overflow-y-auto">
+                          {(homeTeam?.players || []).map(p => (
+                            <button key={p.id} disabled={p.status === 'injured'} onClick={() => toggleHomeStarter(p.id)} className={`p-1.5 rounded text-left border text-[10px] font-bold transition flex justify-between items-center ${homeStartingFive.includes(p.id) ? 'bg-orange-600/30 border-orange-500 text-white' : 'bg-gray-800/60 border-gray-700 text-gray-300'}`}>
+                              <span className="truncate">#{p.number} {p.name}</span>
+                              <Star size={12} className={homeStartingFive.includes(p.id) ? 'text-orange-400 fill-orange-400' : 'text-gray-600'} />
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+
+                      <div className="bg-gray-900/90 p-2.5 rounded-lg border border-gray-700">
+                        <div className="flex justify-between items-center mb-1.5">
+                          <span className="text-[11px] font-bold text-blue-400">{awayTeam?.name} - İlk 5</span>
+                          <span className={`text-[10px] font-black px-1.5 py-0.5 rounded ${awayStartingFive.length === 5 ? 'bg-emerald-950 text-emerald-400 border border-emerald-800' : 'bg-amber-950 text-amber-400 border border-amber-800'}`}>
+                            {awayStartingFive.length}/5 Seçildi
+                          </span>
+                        </div>
+                        <div className="grid grid-cols-2 gap-1 max-h-32 overflow-y-auto">
+                          {(awayTeam?.players || []).map(p => (
+                            <button key={p.id} disabled={p.status === 'injured'} onClick={() => toggleAwayStarter(p.id)} className={`p-1.5 rounded text-left border text-[10px] font-bold transition flex justify-between items-center ${awayStartingFive.includes(p.id) ? 'bg-blue-600/30 border-blue-500 text-white' : 'bg-gray-800/60 border-gray-700 text-gray-300'}`}>
+                              <span className="truncate">#{p.number} {p.name}</span>
+                              <Star size={12} className={awayStartingFive.includes(p.id) ? 'text-blue-400 fill-blue-400' : 'text-gray-600'} />
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* MOD 2: BELİRLİ OYUNCULAR (ÖZEL SEÇİM) */}
+                  {trackingMode === 'players' && (
+                    <div className="bg-gray-900/90 p-2.5 rounded-lg border border-gray-700 space-y-2">
+                      <div className="flex justify-between items-center">
+                        <span className="text-[11px] font-bold text-orange-400">Takip Edilecek Oyuncuları Seçin</span>
+                        <span className="text-[10px] font-black bg-orange-950 text-orange-400 px-2 py-0.5 rounded border border-orange-800">
+                          {selectedCustomPlayerIds.length} Oyuncu Seçildi
                         </span>
                       </div>
-                      <div className="grid grid-cols-2 gap-1 max-h-36 overflow-y-auto">
-                        {(homeTeam?.players || []).map(p => {
-                          const isInjured = p.status === 'injured';
-                          const isSelected = homeStartingFive.includes(p.id);
-
+                      
+                      <div className="grid grid-cols-2 gap-1.5 max-h-48 overflow-y-auto">
+                        {allAvailablePlayers.map(p => {
+                          const isSelected = selectedCustomPlayerIds.includes(p.id);
                           return (
                             <button
                               key={p.id}
-                              disabled={isInjured}
-                              onClick={() => toggleHomeStarter(p.id)}
-                              className={`p-1.5 rounded text-left border text-[10px] font-bold transition flex justify-between items-center ${
-                                isInjured ? 'bg-rose-950/20 border-rose-900/40 text-gray-600 cursor-not-allowed' :
-                                isSelected ? 'bg-orange-600/30 border-orange-500 text-white' : 'bg-gray-800/60 border-gray-700 text-gray-300 hover:bg-gray-800'
+                              onClick={() => toggleCustomPlayer(p.id)}
+                              className={`p-2 rounded-lg border text-left text-[10px] font-bold transition flex justify-between items-center ${
+                                isSelected ? 'bg-emerald-600/30 border-emerald-500 text-white shadow' : 'bg-gray-800/60 border-gray-700 text-gray-300'
                               }`}
                             >
-                              <span className="truncate">#{p.number} {p.name}</span>
-                              <Star size={12} className={isSelected ? 'text-orange-400 fill-orange-400' : 'text-gray-600'} />
+                              <div>
+                                <div className="truncate">#{p.number} {p.name}</div>
+                                <div className="text-[8px] text-gray-400">{p.teamName}</div>
+                              </div>
+                              <UserCheck2 size={14} className={isSelected ? 'text-emerald-400' : 'text-gray-600'} />
                             </button>
                           );
                         })}
                       </div>
                     </div>
+                  )}
 
-                    <div className="bg-gray-900/90 p-2.5 rounded-lg border border-gray-700">
-                      <div className="flex justify-between items-center mb-1.5">
-                        <span className="text-[11px] font-bold text-blue-400">{awayTeam?.name} - İlk 5</span>
-                        <span className={`text-[10px] font-black px-1.5 py-0.5 rounded ${awayStartingFive.length === 5 ? 'bg-emerald-950 text-emerald-400 border border-emerald-800' : 'bg-amber-950 text-amber-400 border border-amber-800'}`}>
-                          {awayStartingFive.length}/5 Seçildi
-                        </span>
-                      </div>
-                      <div className="grid grid-cols-2 gap-1 max-h-36 overflow-y-auto">
-                        {(awayTeam?.players || []).map(p => {
-                          const isInjured = p.status === 'injured';
-                          const isSelected = awayStartingFive.includes(p.id);
-
-                          return (
-                            <button
-                              key={p.id}
-                              disabled={isInjured}
-                              onClick={() => toggleAwayStarter(p.id)}
-                              className={`p-1.5 rounded text-left border text-[10px] font-bold transition flex justify-between items-center ${
-                                isInjured ? 'bg-rose-950/20 border-rose-900/40 text-gray-600 cursor-not-allowed' :
-                                isSelected ? 'bg-blue-600/30 border-blue-500 text-white' : 'bg-gray-800/60 border-gray-700 text-gray-300 hover:bg-gray-800'
-                              }`}
-                            >
-                              <span className="truncate">#{p.number} {p.name}</span>
-                              <Star size={12} className={isSelected ? 'text-blue-400 fill-blue-400' : 'text-gray-600'} />
-                            </button>
-                          );
-                        })}
-                      </div>
+                  {/* MOD 3: SADECE SKOR */}
+                  {trackingMode === 'scoreboard_only' && (
+                    <div className="bg-gray-900 p-3 rounded-lg border border-gray-700 text-center space-y-1">
+                      <span className="text-xs font-bold text-emerald-400 block">Sadece Skor Takip Modu</span>
+                      <p className="text-[10px] text-gray-400">Oyuncu istatistiği tutulmayacak. Doğrudan skorboard düğmeleriyle maç skoru takip edilecek.</p>
                     </div>
-                  </div>
+                  )}
 
                   <button 
                     onClick={startMatch} 
-                    disabled={!canStartMatch}
-                    className={`w-full font-bold py-2.5 rounded-xl text-xs flex items-center justify-center gap-1.5 transition ${
-                      canStartMatch 
-                        ? 'bg-emerald-600 hover:bg-emerald-500 text-white shadow-lg cursor-pointer' 
-                        : 'bg-gray-800 text-gray-500 border border-gray-700 cursor-not-allowed'
-                    }`}
+                    className="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-2.5 rounded-xl text-xs flex items-center justify-center gap-1.5 shadow-lg active:scale-95 transition"
                   >
-                    <CheckCircle2 size={16} /> 
-                    {canStartMatch ? 'İlk 5 Onaylandı - Maçı Başlat' : 'Her iki takımdan 5 oyuncu seçilmelidir'}
+                    <CheckCircle2 size={16} /> Maçı Başlat
                   </button>
                 </div>
               ) : (
                 <>
-                  {/* TAKIM SEÇİM VE OTOMATİK KAYIT DURDURMA / BAŞLATMA DÜĞMESİ */}
-                  <div className="flex justify-between items-center bg-gray-950 p-1 rounded-xl border border-gray-800 gap-1.5">
-                    <div className="flex flex-1 gap-1">
-                      <button 
-                        onClick={() => setActiveTrackingTeam('home')}
-                        className={`flex-1 py-1.5 rounded-lg text-xs font-black transition ${activeTrackingTeam === 'home' ? 'bg-orange-600 text-white shadow-md' : 'text-gray-400 hover:text-white'}`}
-                      >
-                        {homeTeam?.name}
-                      </button>
-                      <button 
-                        onClick={() => setActiveTrackingTeam('away')}
-                        className={`flex-1 py-1.5 rounded-lg text-xs font-black transition ${activeTrackingTeam === 'away' ? 'bg-orange-600 text-white shadow-md' : 'text-gray-400 hover:text-white'}`}
-                      >
-                        {awayTeam?.name}
-                      </button>
-                    </div>
+                  {/* CANLI EKRANLAR MODA GÖRE DEĞİŞİR */}
 
-                    {/* OTO-KAYIT TOGGLE BUTONU */}
+                  {/* OTO-KAYIT TOGGLE */}
+                  <div className="flex justify-between items-center bg-gray-950 p-1 rounded-xl border border-gray-800 gap-1.5">
+                    {trackingMode !== 'scoreboard_only' && (
+                      <div className="flex flex-1 gap-1">
+                        <button onClick={() => setActiveTrackingTeam('home')} className={`flex-1 py-1.5 rounded-lg text-xs font-black transition ${activeTrackingTeam === 'home' ? 'bg-orange-600 text-white shadow-md' : 'text-gray-400 hover:text-white'}`}>{homeTeam?.name}</button>
+                        <button onClick={() => setActiveTrackingTeam('away')} className={`flex-1 py-1.5 rounded-lg text-xs font-black transition ${activeTrackingTeam === 'away' ? 'bg-orange-600 text-white shadow-md' : 'text-gray-400 hover:text-white'}`}>{awayTeam?.name}</button>
+                      </div>
+                    )}
+
                     <button 
-                      onClick={() => {
-                        setIsAutoSaveEnabled(!isAutoSaveEnabled);
-                        showNotification(isAutoSaveEnabled ? "Otomatik kayıt DURDURULDU" : "Otomatik kayıt BAŞLATILDI", !isAutoSaveEnabled);
-                      }}
-                      className={`flex items-center gap-1 px-2.5 py-1 rounded-lg text-[10px] font-extrabold border transition ${
-                        isAutoSaveEnabled 
-                          ? 'bg-emerald-950/80 border-emerald-800/60 text-emerald-400 hover:bg-emerald-900' 
-                          : 'bg-amber-950/80 border-amber-800/60 text-amber-400 hover:bg-amber-900'
-                      }`}
+                      onClick={() => setIsAutoSaveEnabled(!isAutoSaveEnabled)}
+                      className={`flex items-center gap-1 px-2.5 py-1 rounded-lg text-[10px] font-extrabold border transition ${isAutoSaveEnabled ? 'bg-emerald-950/80 border-emerald-800/60 text-emerald-400' : 'bg-amber-950/80 border-amber-800/60 text-amber-400'}`}
                     >
                       <Save size={12} className={isAutoSaveEnabled ? 'animate-pulse' : ''} />
                       <span>{isAutoSaveEnabled ? (lastSavedTime ? `Oto Kayıt: ${lastSavedTime}` : 'Oto Kayıt: Aktif') : 'Oto Kayıt: Durduruldu'}</span>
                     </button>
                   </div>
 
-                  {/* SAHADAKİ OYUNCULAR (5) */}
-                  <div>
-                    <div className="flex justify-between items-center mb-1.5 px-1">
-                      <span className="text-[10px] font-black text-gray-400 uppercase tracking-wider flex items-center gap-1">
-                        <Users size={12} className="text-orange-400" /> Sahadaki Oyuncular
-                      </span>
-                      <span className="text-[9px] text-orange-400 font-bold">🔄 Değişiklik</span>
+                  {/* CANLI EKRAN - EĞER SADECE SKOR MODUYSA */}
+                  {trackingMode === 'scoreboard_only' ? (
+                    <div className="bg-gray-900 rounded-2xl p-4 border-2 border-orange-500/30 shadow-2xl space-y-4">
+                      <div className="text-center border-b border-gray-800 pb-2">
+                        <span className="text-xs font-black text-orange-400 uppercase tracking-widest">Hızlı Skorboard Modu</span>
+                      </div>
+
+                      {/* EV SAHİBİ SKOR DÜĞMELERİ */}
+                      <div className="bg-gray-800/60 p-3 rounded-xl border border-gray-700 space-y-2">
+                        <div className="flex justify-between items-center">
+                          <span className="text-xs font-black text-orange-400">{homeTeam?.name}</span>
+                          <span className="text-2xl font-black text-white">{homeScore} SAYI</span>
+                        </div>
+                        <div className="grid grid-cols-3 gap-2">
+                          <button onClick={() => handleDirectScore('home', 1)} className="bg-emerald-600 hover:bg-emerald-500 text-white font-black py-2.5 rounded-xl text-xs">+1 Sayı</button>
+                          <button onClick={() => handleDirectScore('home', 2)} className="bg-emerald-600 hover:bg-emerald-500 text-white font-black py-2.5 rounded-xl text-xs">+2 Sayı</button>
+                          <button onClick={() => handleDirectScore('home', 3)} className="bg-emerald-600 hover:bg-emerald-500 text-white font-black py-2.5 rounded-xl text-xs">+3 Sayı</button>
+                        </div>
+                        <div className="flex justify-end">
+                          <button onClick={() => handleDirectScore('home', 1, true)} className="text-[10px] font-bold text-rose-400 hover:underline">-1 Skor Düş</button>
+                        </div>
+                      </div>
+
+                      {/* RAKİP SKOR DÜĞMELERİ */}
+                      <div className="bg-gray-800/60 p-3 rounded-xl border border-gray-700 space-y-2">
+                        <div className="flex justify-between items-center">
+                          <span className="text-xs font-black text-blue-400">{awayTeam?.name}</span>
+                          <span className="text-2xl font-black text-white">{awayScore} SAYI</span>
+                        </div>
+                        <div className="grid grid-cols-3 gap-2">
+                          <button onClick={() => handleDirectScore('away', 1)} className="bg-blue-600 hover:bg-blue-500 text-white font-black py-2.5 rounded-xl text-xs">+1 Sayı</button>
+                          <button onClick={() => handleDirectScore('away', 2)} className="bg-blue-600 hover:bg-blue-500 text-white font-black py-2.5 rounded-xl text-xs">+2 Sayı</button>
+                          <button onClick={() => handleDirectScore('away', 3)} className="bg-blue-600 hover:bg-blue-500 text-white font-black py-2.5 rounded-xl text-xs">+3 Sayı</button>
+                        </div>
+                        <div className="flex justify-end">
+                          <button onClick={() => handleDirectScore('away', 1, true)} className="text-[10px] font-bold text-rose-400 hover:underline">-1 Skor Düş</button>
+                        </div>
+                      </div>
                     </div>
-                    
-                    <div className="grid grid-cols-5 gap-1.5">
-                      {courtPlayers.map(player => {
-                        const isSelected = player.id === selectedPlayerId;
-                        const isMarkedForSub = player.id === subOutPlayerId;
+                  ) : (
+                    /* CANLI EKRAN - OYUNCU VEYA TAM MAÇ MODU */
+                    <>
+                      {/* SAHADAKİ OYUNCULAR */}
+                      <div>
+                        <div className="flex justify-between items-center mb-1.5 px-1">
+                          <span className="text-[10px] font-black text-gray-400 uppercase tracking-wider flex items-center gap-1">
+                            <Users size={12} className="text-orange-400" /> Takip Edilen Oyuncular
+                          </span>
+                          {trackingMode === 'full' && <span className="text-[9px] text-orange-400 font-bold">🔄 Değişiklik</span>}
+                        </div>
+                        
+                        <div className="grid grid-cols-5 gap-1.5">
+                          {courtPlayers.map(player => {
+                            const isSelected = player.id === selectedPlayerId;
+                            const isMarkedForSub = player.id === subOutPlayerId;
 
-                        return (
-                          <div key={player.id} className="relative">
-                            <button
-                              onClick={() => {
-                                setSelectedPlayerId(player.id);
-                                if (subOutPlayerId === player.id) setSubOutPlayerId(null);
-                              }}
-                              className={`w-full p-1 rounded-xl border text-left transition-all flex flex-col justify-between h-20 relative overflow-hidden active:scale-95 ${
-                                isMarkedForSub
-                                  ? 'bg-rose-900/50 border-rose-500 text-rose-200 animate-pulse'
-                                  : isSelected 
-                                  ? 'bg-gradient-to-b from-orange-600/30 to-orange-950/60 border-2 border-orange-500 text-white shadow-xl scale-[1.02]' 
-                                  : 'bg-gray-800/80 border-gray-700/80 text-gray-300 hover:bg-gray-800'
-                              }`}
-                            >
-                              <div className="flex justify-between items-start">
-                                <span className={`text-[11px] font-black px-1.5 py-0.2 rounded-md ${isSelected ? 'bg-orange-500 text-black shadow-sm' : 'bg-gray-700 text-gray-200'}`}>
-                                  #{player.number}
-                                </span>
-                                <span className="text-[8px] font-bold text-gray-400 uppercase">{player.position}</span>
+                            return (
+                              <div key={player.id} className="relative">
+                                <button
+                                  onClick={() => { setSelectedPlayerId(player.id); if (subOutPlayerId === player.id) setSubOutPlayerId(null); }}
+                                  className={`w-full p-1 rounded-xl border text-left transition-all flex flex-col justify-between h-20 relative overflow-hidden active:scale-95 ${
+                                    isMarkedForSub ? 'bg-rose-900/50 border-rose-500 text-rose-200 animate-pulse' :
+                                    isSelected ? 'bg-gradient-to-b from-orange-600/30 to-orange-950/60 border-2 border-orange-500 text-white shadow-xl scale-[1.02]' : 'bg-gray-800/80 border-gray-700/80 text-gray-300'
+                                  }`}
+                                >
+                                  <div className="flex justify-between items-start">
+                                    <span className={`text-[11px] font-black px-1.5 py-0.2 rounded-md ${isSelected ? 'bg-orange-500 text-black' : 'bg-gray-700 text-gray-200'}`}>#{player.number}</span>
+                                    <span className="text-[8px] font-bold text-gray-400 uppercase">{player.position}</span>
+                                  </div>
+                                  <div className="text-[11px] font-black leading-tight truncate my-0.5 text-white">{player.name.split(' ')[0]}</div>
+                                  <div className="flex justify-between items-center pt-1 border-t border-gray-700/60 text-[9px] font-bold">
+                                    <span className="text-orange-400">{player.pts}S</span>
+                                    <span className={`${player.pf >= 4 ? 'text-red-400 font-extrabold' : 'text-gray-400'}`}>{player.pf}F</span>
+                                  </div>
+                                </button>
+
+                                {trackingMode === 'full' && (
+                                  <button onClick={() => setSubOutPlayerId(isMarkedForSub ? null : player.id)} title="Oyuncu Değiştir" className={`absolute -top-1.5 -right-1.5 w-6 h-6 rounded-full flex items-center justify-center border shadow-lg transition ${isMarkedForSub ? 'bg-rose-600 border-rose-400 text-white' : 'bg-gray-800 border-gray-600 text-gray-300'}`}>
+                                    <RefreshCw size={11} />
+                                  </button>
+                                )}
                               </div>
+                            );
+                          })}
+                        </div>
+                      </div>
 
-                              <div className="text-[11px] font-black leading-tight truncate my-0.5 text-white">{player.name.split(' ')[0]}</div>
-
-                              <div className="flex justify-between items-center pt-1 border-t border-gray-700/60 text-[9px] font-bold">
-                                <span className="text-orange-400">{player.pts}S</span>
-                                <span className={`${player.pf >= 4 ? 'text-red-400 font-extrabold' : 'text-gray-400'}`}>{player.pf}F</span>
-                              </div>
-                            </button>
-
-                            <button 
-                              onClick={() => setSubOutPlayerId(isMarkedForSub ? null : player.id)}
-                              title="Oyuncu Değiştir"
-                              className={`absolute -top-1.5 -right-1.5 w-6 h-6 rounded-full flex items-center justify-center border shadow-lg transition active:scale-90 ${
-                                isMarkedForSub ? 'bg-rose-600 border-rose-400 text-white' : 'bg-gray-800 border-gray-600 text-gray-300 hover:text-white'
-                              }`}
-                            >
-                              <RefreshCw size={11} />
-                            </button>
+                      {/* BENCH DEĞİŞİKLİK ÇEKMECESİ */}
+                      {subOutPlayerId && trackingMode === 'full' && (
+                        <div className="bg-rose-950/40 border-2 border-rose-800 rounded-2xl p-3 space-y-2">
+                          <div className="flex justify-between items-center">
+                            <span className="text-xs font-bold text-rose-300 flex items-center gap-1"><ArrowLeftRight size={14} /> Girecek Oyuncuyu Seçin:</span>
+                            <button onClick={() => setSubOutPlayerId(null)} className="text-[10px] text-gray-400 hover:text-white underline font-bold">İptal</button>
                           </div>
-                        );
-                      })}
-                    </div>
-                  </div>
-
-                  {/* BENCH / SAHA KENARI ÇEKMECESİ */}
-                  {subOutPlayerId && (
-                    <div className="bg-rose-950/40 border-2 border-rose-800 rounded-2xl p-3 space-y-2">
-                      <div className="flex justify-between items-center">
-                        <span className="text-xs font-bold text-rose-300 flex items-center gap-1">
-                          <ArrowLeftRight size={14} /> Girecek Oyuncuyu Seçin:
-                        </span>
-                        <button onClick={() => setSubOutPlayerId(null)} className="text-[10px] text-gray-400 hover:text-white underline font-bold">İptal</button>
-                      </div>
-
-                      <div className="grid grid-cols-2 gap-2">
-                        {benchPlayers.map(bPlayer => (
-                          <button
-                            key={bPlayer.id}
-                            onClick={() => executeSub(bPlayer.id)}
-                            className="bg-emerald-950/80 hover:bg-emerald-900 border border-emerald-600 p-2 rounded-xl text-left transition flex items-center justify-between active:scale-95 shadow-md"
-                          >
-                            <div>
-                              <div className="text-xs font-black text-emerald-300">#{bPlayer.number} {bPlayer.name.split(' ')[0]}</div>
-                              <div className="text-[9px] font-bold text-gray-400">{bPlayer.position} | {bPlayer.pts} PTS</div>
-                            </div>
-                            <span className="text-[10px] font-black bg-emerald-600 text-black px-1.5 py-0.5 rounded-lg">GİR ➔</span>
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-
-                  {/* AKSİYON VE GERİ ALMA/EKSİ BUTONLARI PANENLİ */}
-                  {selectedPlayer && (
-                    <div className="bg-gray-900 rounded-2xl p-3 border-2 border-orange-500/30 shadow-2xl space-y-2.5">
-                      <div className="flex justify-between items-center pb-1.5 border-b border-gray-800">
-                        <div className="flex items-center gap-1.5">
-                          <span className="bg-orange-500 text-black font-black text-xs px-2 py-0.5 rounded-md">#{selectedPlayer.number}</span>
-                          <span className="text-xs font-black text-white truncate max-w-[110px]">{selectedPlayer.name}</span>
+                          <div className="grid grid-cols-2 gap-2">
+                            {benchPlayers.map(bPlayer => (
+                              <button key={bPlayer.id} onClick={() => executeSub(bPlayer.id)} className="bg-emerald-950/80 hover:bg-emerald-900 border border-emerald-600 p-2 rounded-xl text-left transition flex items-center justify-between shadow-md">
+                                <div>
+                                  <div className="text-xs font-black text-emerald-300">#{bPlayer.number} {bPlayer.name.split(' ')[0]}</div>
+                                  <div className="text-[9px] font-bold text-gray-400">{bPlayer.position} | {bPlayer.pts} PTS</div>
+                                </div>
+                                <span className="text-[10px] font-black bg-emerald-600 text-black px-1.5 py-0.5 rounded-lg">GİR ➔</span>
+                              </button>
+                            ))}
+                          </div>
                         </div>
-                        <span className="text-[11px] font-mono font-bold text-orange-400">{selectedPlayer.pts} Sayı | {selectedPlayer.reb} Reb | {selectedPlayer.ast} Ast</span>
-                      </div>
-
-                      {/* SON İŞLEMİ GERİ AL / UNDO BUTONU */}
-                      <button 
-                        onClick={handleUndo}
-                        disabled={actionHistory.length === 0}
-                        className={`w-full font-black py-2 rounded-xl text-xs flex items-center justify-center gap-1.5 shadow-md transition active:scale-95 ${
-                          actionHistory.length > 0 
-                            ? 'bg-rose-950/80 hover:bg-rose-900 text-rose-300 border border-rose-700/80' 
-                            : 'bg-gray-800/40 text-gray-600 border border-gray-800 cursor-not-allowed'
-                        }`}
-                      >
-                        <Undo2 size={14} /> 
-                        {actionHistory.length > 0 ? `Son İşlemi Geri Al (${actionHistory.length} İşlem)` : 'Geri Alınacak İşlem Yok'}
-                      </button>
-
-                      {/* BÜYÜK SAYI VE MİNİK EKSİ BUTONLARI */}
-                      <div className="grid grid-cols-3 gap-2">
-                        {/* +2 / -2 */}
-                        <div className="flex items-center gap-1">
-                          <button onClick={() => handleStat('PTS', 2, true, false)} className="flex-1 bg-gradient-to-b from-emerald-600 to-emerald-800 hover:from-emerald-500 hover:to-emerald-700 active:scale-95 text-white font-black py-3 rounded-xl text-xs shadow-lg border border-emerald-400/30 flex items-center justify-center gap-0.5">
-                            +2 Sayı
-                          </button>
-                          <button onClick={() => handleStat('PTS', 2, true, true)} title="2 Sayı Düş" className="bg-rose-950/80 hover:bg-rose-900 border border-rose-700 text-rose-300 font-black text-base px-3 py-2.5 rounded-xl active:scale-90 flex items-center justify-center shadow-md">
-                            -
-                          </button>
-                        </div>
-
-                        {/* +3 / -3 */}
-                        <div className="flex items-center gap-1">
-                          <button onClick={() => handleStat('PTS', 3, true, false)} className="flex-1 bg-gradient-to-b from-emerald-600 to-emerald-800 hover:from-emerald-500 hover:to-emerald-700 active:scale-95 text-white font-black py-3 rounded-xl text-xs shadow-lg border border-emerald-400/30 flex items-center justify-center gap-0.5">
-                            +3 Sayı
-                          </button>
-                          <button onClick={() => handleStat('PTS', 3, true, true)} title="3 Sayı Düş" className="bg-rose-950/80 hover:bg-rose-900 border border-rose-700 text-rose-300 font-black text-base px-3 py-2.5 rounded-xl active:scale-90 flex items-center justify-center shadow-md">
-                            -
-                          </button>
-                        </div>
-
-                        {/* +1 / -1 SERBEST */}
-                        <div className="flex items-center gap-1">
-                          <button onClick={() => handleStat('PTS', 1, true, false)} className="flex-1 bg-gradient-to-b from-emerald-700 to-emerald-900 hover:from-emerald-600 hover:to-emerald-800 active:scale-95 text-emerald-100 font-bold py-3 rounded-xl text-[10px] shadow-lg border border-emerald-500/20 flex items-center justify-center gap-0.5">
-                            +1 Serbest
-                          </button>
-                          <button onClick={() => handleStat('PTS', 1, true, true)} title="1 Serbest Düş" className="bg-rose-950/80 hover:bg-rose-900 border border-rose-700 text-rose-300 font-black text-base px-3 py-2.5 rounded-xl active:scale-90 flex items-center justify-center shadow-md">
-                            -
-                          </button>
-                        </div>
-                      </div>
-
-                      {/* İSTATİSTİK BÜYÜK BUTONLARI + MİNİK EKSİ BUTONLARI */}
-                      <div className="grid grid-cols-3 gap-2 pt-1">
-                        {/* REB */}
-                        <div className="flex items-center gap-1">
-                          <button onClick={() => handleStat('REB', 0, true, false)} className="flex-1 bg-gray-800 hover:bg-gray-700 active:scale-95 border border-gray-700 text-gray-100 py-2.5 rounded-xl text-xs font-bold flex items-center justify-center gap-1 shadow-md">
-                            <Shield size={13} className="text-blue-400" /> REB
-                          </button>
-                          <button onClick={() => handleStat('REB', 0, true, true)} title="Rebound Düş" className="bg-gray-900 hover:bg-rose-950/80 border border-gray-700 text-rose-400 font-black text-xs px-2.5 py-2 rounded-xl active:scale-90 flex items-center justify-center">
-                            -
-                          </button>
-                        </div>
-
-                        {/* AST */}
-                        <div className="flex items-center gap-1">
-                          <button onClick={() => handleStat('AST', 0, true, false)} className="flex-1 bg-gray-800 hover:bg-gray-700 active:scale-95 border border-gray-700 text-gray-100 py-2.5 rounded-xl text-xs font-bold flex items-center justify-center gap-1 shadow-md">
-                            <Target size={13} className="text-amber-400" /> AST
-                          </button>
-                          <button onClick={() => handleStat('AST', 0, true, true)} title="Asist Düş" className="bg-gray-900 hover:bg-rose-950/80 border border-gray-700 text-rose-400 font-black text-xs px-2.5 py-2 rounded-xl active:scale-90 flex items-center justify-center">
-                            -
-                          </button>
-                        </div>
-
-                        {/* STL */}
-                        <div className="flex items-center gap-1">
-                          <button onClick={() => handleStat('STL', 0, true, false)} className="flex-1 bg-gray-800 hover:bg-gray-700 active:scale-95 border border-gray-700 text-gray-100 py-2.5 rounded-xl text-xs font-bold flex items-center justify-center gap-1 shadow-md">
-                            <Activity size={13} className="text-emerald-400" /> STL
-                          </button>
-                          <button onClick={() => handleStat('STL', 0, true, true)} title="Top Çalma Düş" className="bg-gray-900 hover:bg-rose-950/80 border border-gray-700 text-rose-400 font-black text-xs px-2.5 py-2 rounded-xl active:scale-90 flex items-center justify-center">
-                            -
-                          </button>
-                        </div>
-
-                        {/* BLK */}
-                        <div className="flex items-center gap-1">
-                          <button onClick={() => handleStat('BLK', 0, true, false)} className="flex-1 bg-gray-800 hover:bg-gray-700 active:scale-95 border border-gray-700 text-gray-100 py-2.5 rounded-xl text-xs font-bold flex items-center justify-center gap-1 shadow-md">
-                            <Award size={13} className="text-purple-400" /> BLK
-                          </button>
-                          <button onClick={() => handleStat('BLK', 0, true, true)} title="Blok Düş" className="bg-gray-900 hover:bg-rose-950/80 border border-gray-700 text-rose-400 font-black text-xs px-2.5 py-2 rounded-xl active:scale-90 flex items-center justify-center">
-                            -
-                          </button>
-                        </div>
-
-                        {/* TOV */}
-                        <div className="flex items-center gap-1">
-                          <button onClick={() => handleStat('TOV', 0, true, false)} className="flex-1 bg-gray-800 hover:bg-gray-700 active:scale-95 border border-gray-700 text-gray-100 py-2.5 rounded-xl text-xs font-bold flex items-center justify-center gap-1 shadow-md">
-                            <RotateCcw size={13} className="text-rose-400" /> TOV
-                          </button>
-                          <button onClick={() => handleStat('TOV', 0, true, true)} title="Top Kaybı Düş" className="bg-gray-900 hover:bg-rose-950/80 border border-gray-700 text-rose-400 font-black text-xs px-2.5 py-2 rounded-xl active:scale-90 flex items-center justify-center">
-                            -
-                          </button>
-                        </div>
-
-                        {/* PF (FAUL) */}
-                        <div className="flex items-center gap-1">
-                          <button onClick={() => handleStat('PF', 0, true, false)} className="flex-1 bg-gray-800 hover:bg-gray-700 active:scale-95 border border-gray-700 text-orange-200 py-2.5 rounded-xl text-xs font-black flex items-center justify-center gap-1 shadow-md">
-                            <Flame size={13} className="text-orange-500" /> FAUL
-                          </button>
-                          <button onClick={() => handleStat('PF', 0, true, true)} title="Faul Düş" className="bg-gray-900 hover:bg-rose-950/80 border border-gray-700 text-rose-400 font-black text-xs px-2.5 py-2 rounded-xl active:scale-90 flex items-center justify-center">
-                            -
-                          </button>
-                        </div>
-                      </div>
-                    </div>
-                  )}
-
-                  {/* YARI SAHA ŞUT HARİTASI GÖRSELİ VE ŞUT SİLME */}
-                  <div className="bg-gray-900 border border-gray-800 rounded-2xl p-2.5 space-y-1.5">
-                    <div className="flex justify-between items-center">
-                      <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider block">Saha Şut Haritası</span>
-                      {shots.length > 0 && (
-                        <button 
-                          onClick={() => setShots(prev => prev.slice(0, -1))}
-                          className="text-[9px] text-rose-400 font-bold underline hover:text-rose-300"
-                        >
-                          Son Şutu Haritadan Sil
-                        </button>
                       )}
-                    </div>
-                    <div className="relative w-full aspect-[4/3] bg-orange-950/20 border-2 border-orange-500/40 rounded-xl overflow-hidden cursor-pointer active:opacity-90" onClick={handleCourtClick}>
-                      <svg className="absolute inset-0 w-full h-full stroke-orange-500/30 fill-none" viewBox="0 0 100 75">
-                        <rect x="35" y="0" width="30" height="30" strokeWidth="1" />
-                        <circle cx="50" cy="30" r="12" strokeWidth="1" />
-                        <path d="M 10 0 L 10 15 A 40 40 0 0 0 90 15 L 90 0" strokeWidth="1.5" />
-                        <line x1="40" y1="3" x2="60" y2="3" strokeWidth="2" stroke="white" />
-                        <circle cx="50" cy="6" r="3" strokeWidth="1" stroke="orange" />
-                      </svg>
 
-                      {shots.map(shot => (
-                        <div
-                          key={shot.id}
-                          style={{ left: `${shot.x}%`, top: `${shot.y}%` }}
-                          className={`absolute w-3.5 h-3.5 -ml-1.5 -mt-1.5 rounded-full border flex items-center justify-center text-[8px] font-black shadow-md ${
-                            shot.made ? 'bg-emerald-500 border-emerald-300 text-black' : 'bg-rose-600 border-rose-300 text-white'
-                          }`}
-                        >
-                          {shot.made ? '✓' : '✕'}
+                      {/* İSTATİSTİK BUTONLARI PANENLİ */}
+                      {selectedPlayer && (
+                        <div className="bg-gray-900 rounded-2xl p-3 border-2 border-orange-500/30 shadow-2xl space-y-2.5">
+                          <div className="flex justify-between items-center pb-1.5 border-b border-gray-800">
+                            <div className="flex items-center gap-1.5">
+                              <span className="bg-orange-500 text-black font-black text-xs px-2 py-0.5 rounded-md">#{selectedPlayer.number}</span>
+                              <span className="text-xs font-black text-white truncate max-w-[110px]">{selectedPlayer.name}</span>
+                            </div>
+                            <span className="text-[11px] font-mono font-bold text-orange-400">{selectedPlayer.pts} Sayı | {selectedPlayer.reb} Reb | {selectedPlayer.ast} Ast</span>
+                          </div>
+
+                          <button onClick={handleUndo} disabled={actionHistory.length === 0} className={`w-full font-black py-2 rounded-xl text-xs flex items-center justify-center gap-1.5 shadow-md transition ${actionHistory.length > 0 ? 'bg-rose-950/80 text-rose-300 border border-rose-700/80' : 'bg-gray-800/40 text-gray-600 border border-gray-800 cursor-not-allowed'}`}>
+                            <Undo2 size={14} /> {actionHistory.length > 0 ? `Son İşlemi Geri Al (${actionHistory.length} İşlem)` : 'Geri Alınacak İşlem Yok'}
+                          </button>
+
+                          {/* BÜYÜK + VE MİNİK - BUTONLARI */}
+                          <div className="grid grid-cols-3 gap-2">
+                            <div className="flex items-center gap-1">
+                              <button onClick={() => handleStat('PTS', 2, true, false)} className="flex-1 bg-gradient-to-b from-emerald-600 to-emerald-800 text-white font-black py-3 rounded-xl text-xs border border-emerald-400/30">+2 Sayı</button>
+                              <button onClick={() => handleStat('PTS', 2, true, true)} className="bg-rose-950/80 border border-rose-700 text-rose-300 font-black text-base px-3 py-2.5 rounded-xl">-</button>
+                            </div>
+                            <div className="flex items-center gap-1">
+                              <button onClick={() => handleStat('PTS', 3, true, false)} className="flex-1 bg-gradient-to-b from-emerald-600 to-emerald-800 text-white font-black py-3 rounded-xl text-xs border border-emerald-400/30">+3 Sayı</button>
+                              <button onClick={() => handleStat('PTS', 3, true, true)} className="bg-rose-950/80 border border-rose-700 text-rose-300 font-black text-base px-3 py-2.5 rounded-xl">-</button>
+                            </div>
+                            <div className="flex items-center gap-1">
+                              <button onClick={() => handleStat('PTS', 1, true, false)} className="flex-1 bg-gradient-to-b from-emerald-700 to-emerald-900 text-emerald-100 font-bold py-3 rounded-xl text-[10px] border border-emerald-500/20">+1 Serbest</button>
+                              <button onClick={() => handleStat('PTS', 1, true, true)} className="bg-rose-950/80 border border-rose-700 text-rose-300 font-black text-base px-3 py-2.5 rounded-xl">-</button>
+                            </div>
+                          </div>
+
+                          <div className="grid grid-cols-3 gap-2 pt-1">
+                            <div className="flex items-center gap-1">
+                              <button onClick={() => handleStat('REB', 0, true, false)} className="flex-1 bg-gray-800 border border-gray-700 text-gray-100 py-2.5 rounded-xl text-xs font-bold flex items-center justify-center gap-1"><Shield size={13} className="text-blue-400" /> REB</button>
+                              <button onClick={() => handleStat('REB', 0, true, true)} className="bg-gray-900 border border-gray-700 text-rose-400 font-black text-xs px-2.5 py-2 rounded-xl">-</button>
+                            </div>
+                            <div className="flex items-center gap-1">
+                              <button onClick={() => handleStat('AST', 0, true, false)} className="flex-1 bg-gray-800 border border-gray-700 text-gray-100 py-2.5 rounded-xl text-xs font-bold flex items-center justify-center gap-1"><Target size={13} className="text-amber-400" /> AST</button>
+                              <button onClick={() => handleStat('AST', 0, true, true)} className="bg-gray-900 border border-gray-700 text-rose-400 font-black text-xs px-2.5 py-2 rounded-xl">-</button>
+                            </div>
+                            <div className="flex items-center gap-1">
+                              <button onClick={() => handleStat('STL', 0, true, false)} className="flex-1 bg-gray-800 border border-gray-700 text-gray-100 py-2.5 rounded-xl text-xs font-bold flex items-center justify-center gap-1"><Activity size={13} className="text-emerald-400" /> STL</button>
+                              <button onClick={() => handleStat('STL', 0, true, true)} className="bg-gray-900 border border-gray-700 text-rose-400 font-black text-xs px-2.5 py-2 rounded-xl">-</button>
+                            </div>
+                            <div className="flex items-center gap-1">
+                              <button onClick={() => handleStat('BLK', 0, true, false)} className="flex-1 bg-gray-800 border border-gray-700 text-gray-100 py-2.5 rounded-xl text-xs font-bold flex items-center justify-center gap-1"><Award size={13} className="text-purple-400" /> BLK</button>
+                              <button onClick={() => handleStat('BLK', 0, true, true)} className="bg-gray-900 border border-gray-700 text-rose-400 font-black text-xs px-2.5 py-2 rounded-xl">-</button>
+                            </div>
+                            <div className="flex items-center gap-1">
+                              <button onClick={() => handleStat('TOV', 0, true, false)} className="flex-1 bg-gray-800 border border-gray-700 text-gray-100 py-2.5 rounded-xl text-xs font-bold flex items-center justify-center gap-1"><RotateCcw size={13} className="text-rose-400" /> TOV</button>
+                              <button onClick={() => handleStat('TOV', 0, true, true)} className="bg-gray-900 border border-gray-700 text-rose-400 font-black text-xs px-2.5 py-2 rounded-xl">-</button>
+                            </div>
+                            <div className="flex items-center gap-1">
+                              <button onClick={() => handleStat('PF', 0, true, false)} className="flex-1 bg-gray-800 border border-gray-700 text-orange-200 py-2.5 rounded-xl text-xs font-black flex items-center justify-center gap-1"><Flame size={13} className="text-orange-500" /> FAUL</button>
+                              <button onClick={() => handleStat('PF', 0, true, true)} className="bg-gray-900 border border-gray-700 text-rose-400 font-black text-xs px-2.5 py-2 rounded-xl">-</button>
+                            </div>
+                          </div>
                         </div>
-                      ))}
-                    </div>
-                  </div>
+                      )}
+                    </>
+                  )}
 
                   {/* MAÇI BİTİR BUTONU */}
                   <div className="pt-2">
-                    <button 
-                      onClick={finishMatch} 
-                      className="w-full bg-rose-900/80 hover:bg-rose-800 border-2 border-rose-600 text-white font-black py-3 rounded-2xl text-xs flex items-center justify-center gap-2 shadow-xl active:scale-95 transition"
-                    >
+                    <button onClick={finishMatch} className="w-full bg-rose-900/80 hover:bg-rose-800 border-2 border-rose-600 text-white font-black py-3 rounded-2xl text-xs flex items-center justify-center gap-2 shadow-xl active:scale-95 transition">
                       <Square size={14} className="fill-white" /> Maçı Bitir & Tüm İstatistikleri Kaydet
                     </button>
                   </div>
@@ -937,281 +857,93 @@ export default function App() {
             <div className="space-y-3">
               <div className="text-center py-1 border-b border-gray-800">
                 <h3 className="text-sm font-black text-orange-500 uppercase tracking-wider">Kadro & Takım Yönetimi</h3>
-                <p className="text-[10px] text-gray-400">Takım ekleyin, kadro oluşturun ve oyuncu durumlarını yönetin</p>
               </div>
 
-              {/* 1. YENİ TAKIM EKLEME */}
               <div className="bg-gray-800/40 p-3 rounded-xl border border-gray-800 space-y-2">
-                <span className="text-xs font-bold text-orange-400 uppercase tracking-wider flex items-center gap-1"><ShieldPlus size={14} /> Yeni Takım / Kulüp Ekle</span>
+                <span className="text-xs font-bold text-orange-400 uppercase tracking-wider flex items-center gap-1"><ShieldPlus size={14} /> Yeni Takım Ekle</span>
                 <form onSubmit={handleAddTeam} className="flex gap-2">
                   <input type="text" placeholder="Takım Adı" value={newTeam.name} onChange={e => setNewTeam({...newTeam, name: e.target.value})} className="flex-1 bg-gray-900 border border-gray-700 text-xs text-white p-2 rounded-lg" required />
-                  <button type="submit" className="bg-orange-600 hover:bg-orange-500 text-white font-bold px-3 py-2 rounded-lg text-xs">Ekle</button>
+                  <button type="submit" className="bg-orange-600 text-white font-bold px-3 py-2 rounded-lg text-xs">Ekle</button>
                 </form>
               </div>
 
-              {/* 2. MEVCUT TAKIM SEÇİMİ */}
               <div className="bg-gray-900 p-2.5 rounded-xl border border-gray-800 space-y-1.5">
-                <label className="text-[10px] font-bold text-gray-400 uppercase tracking-wider block">Yönetilecek Takımı Seç</label>
+                <label className="text-[10px] font-bold text-gray-400 uppercase tracking-wider block">Yönetilecek Takım</label>
                 <select value={selectedRosterTeamId} onChange={e => setSelectedRosterTeamId(e.target.value)} className="w-full bg-gray-950 border border-gray-700 text-xs text-white p-2 rounded-lg font-bold">
-                  {teams.map(t => <option key={t.id} value={t.id}>{t.name} ({t.category})</option>)}
+                  {teams.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
                 </select>
               </div>
 
-              {/* 3. OYUNCU LİSTESİ VE DÜZENLEME */}
               {selectedRosterTeam && (
                 <div className="bg-gray-900 border border-gray-800 rounded-xl p-3 space-y-2">
-                  <div className="flex justify-between items-center border-b border-gray-800 pb-2">
-                    <span className="text-xs font-bold text-white flex items-center gap-1">
-                      <Users size={14} className="text-orange-400" /> Kadro ({selectedRosterTeam.players?.length || 0} Oyuncu)
-                    </span>
-                  </div>
-
+                  <span className="text-xs font-bold text-white flex items-center gap-1"><Users size={14} className="text-orange-400" /> Kadro ({selectedRosterTeam.players?.length || 0} Oyuncu)</span>
                   <div className="space-y-1.5 max-h-52 overflow-y-auto">
-                    {(selectedRosterTeam.players || []).map(p => {
-                      const isInjured = p.status === 'injured';
-
-                      return (
-                        <div key={p.id} className={`flex items-center justify-between p-2 rounded-lg border text-xs transition ${
-                          isInjured ? 'bg-rose-950/20 border-rose-900/50 opacity-60' : 'bg-gray-800/60 border-gray-700/60'
-                        }`}>
-                          <div className="flex items-center gap-2">
-                            <span className="font-extrabold text-orange-400 w-5">#{p.number}</span>
-                            <div>
-                              <div className="font-bold text-white flex items-center gap-1">
-                                {p.name}
-                                {isInjured && <span className="text-[8px] bg-rose-900 text-rose-300 font-bold px-1 rounded">SAKAT</span>}
-                              </div>
-                              <div className="text-[8px] text-gray-400">{p.position} | {p.height} | {p.weight} | {p.age} Yaş</div>
-                            </div>
-                          </div>
-
-                          <div className="flex items-center gap-1">
-                            <button 
-                              onClick={() => handleToggleStatus(p)} 
-                              title={isInjured ? "Aktif Yap" : "Sakat İşaretle"} 
-                              className={`p-1.5 rounded transition ${isInjured ? 'text-emerald-400 hover:text-emerald-300 bg-emerald-950/40' : 'text-rose-400 hover:text-rose-300 bg-rose-950/40'}`}
-                            >
-                              {isInjured ? <UserCheck size={14} /> : <UserX size={14} />}
-                            </button>
-
-                            <button onClick={() => handleDeletePlayer(p.id)} title="Oyuncuyu Sil" className="p-1.5 text-gray-500 hover:text-rose-400 transition">
-                              <Trash2 size={14} />
-                            </button>
+                    {(selectedRosterTeam.players || []).map(p => (
+                      <div key={p.id} className={`flex items-center justify-between p-2 rounded-lg border text-xs ${p.status === 'injured' ? 'bg-rose-950/20 border-rose-900/50 opacity-60' : 'bg-gray-800/60 border-gray-700/60'}`}>
+                        <div className="flex items-center gap-2">
+                          <span className="font-extrabold text-orange-400 w-5">#{p.number}</span>
+                          <div>
+                            <div className="font-bold text-white">{p.name} {p.status === 'injured' && <span className="text-[8px] bg-rose-900 text-rose-300 font-bold px-1 rounded">SAKAT</span>}</div>
+                            <div className="text-[8px] text-gray-400">{p.position}</div>
                           </div>
                         </div>
-                      );
-                    })}
+                        <div className="flex items-center gap-1">
+                          <button onClick={() => handleToggleStatus(p)} className="p-1.5 text-rose-400 hover:text-rose-300">{p.status === 'injured' ? <UserCheck size={14} /> : <UserX size={14} /></button>
+                          <button onClick={() => handleDeletePlayer(p.id)} className="p-1.5 text-gray-500 hover:text-rose-400"><Trash2 size={14} /></button>
+                        </div>
+                      </div>
+                    ))}
                   </div>
                 </div>
               )}
 
-              {/* 4. OYUNCU EKLEME FORMU */}
               <div className="bg-gray-800/80 p-3 rounded-xl border border-gray-700/80 space-y-2">
-                <span className="text-xs font-bold text-gray-200 uppercase tracking-wider flex items-center gap-1">
-                  <UserPlus size={14} className="text-orange-400" /> Takıma Oyuncu Ekle (Forma # Benzersiz)
-                </span>
-
+                <span className="text-xs font-bold text-gray-200 uppercase tracking-wider flex items-center gap-1"><UserPlus size={14} className="text-orange-400" /> Oyuncu Ekle</span>
                 <form onSubmit={handleAddPlayer} className="space-y-2">
                   <div className="grid grid-cols-3 gap-2">
                     <input type="text" placeholder="Ad Soyad" value={newPlayer.name} onChange={e => setNewPlayer({...newPlayer, name: e.target.value})} className="bg-gray-900 border border-gray-700 text-xs text-white p-2 rounded col-span-2" required />
                     <input type="number" placeholder="Forma #" value={newPlayer.number} onChange={e => setNewPlayer({...newPlayer, number: e.target.value})} className="bg-gray-900 border border-gray-700 text-xs text-white p-2 rounded" required />
                   </div>
-
-                  <div className="grid grid-cols-4 gap-1.5">
-                    <select value={newPlayer.position} onChange={e => setNewPlayer({...newPlayer, position: e.target.value})} className="bg-gray-900 border border-gray-700 text-xs text-white p-1.5 rounded">
-                      <option value="PG">PG</option>
-                      <option value="SG">SG</option>
-                      <option value="SF">SF</option>
-                      <option value="PF">PF</option>
-                      <option value="C">C</option>
-                    </select>
-                    <input type="number" placeholder="Boy (cm)" value={newPlayer.height} onChange={e => setNewPlayer({...newPlayer, height: e.target.value})} className="bg-gray-900 border border-gray-700 text-xs text-white p-1.5 rounded" />
-                    <input type="number" placeholder="Kilo (kg)" value={newPlayer.weight} onChange={e => setNewPlayer({...newPlayer, weight: e.target.value})} className="bg-gray-900 border border-gray-700 text-xs text-white p-1.5 rounded" />
-                    <input type="number" placeholder="Yaş" value={newPlayer.age} onChange={e => setNewPlayer({...newPlayer, age: e.target.value})} className="bg-gray-900 border border-gray-700 text-xs text-white p-1.5 rounded" />
-                  </div>
-
-                  <button type="submit" className="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-2 rounded-lg text-xs transition flex items-center justify-center gap-1">
-                    <UserPlus size={14} /> Oyuncuyu Kaydet
-                  </button>
+                  <button type="submit" className="w-full bg-emerald-600 text-white font-bold py-2 rounded-lg text-xs">Oyuncuyu Kaydet</button>
                 </form>
               </div>
             </div>
           )}
 
-          {/* TAB 3: MATCH STATS & GENERAL STATS */}
+          {/* TAB 3: STATS */}
           {activeTab === 'stats' && (
             <div className="space-y-3">
               <div className="flex bg-gray-950 p-1 rounded-xl border border-gray-800">
-                <button 
-                  onClick={() => setStatsViewMode('match')} 
-                  className={`flex-1 py-1.5 rounded-lg text-xs font-bold transition ${statsViewMode === 'match' ? 'bg-orange-600 text-white' : 'text-gray-400 hover:text-white'}`}
-                >
-                  Maç İstatistiği (Canlı)
-                </button>
-                <button 
-                  onClick={() => setStatsViewMode('general')} 
-                  className={`flex-1 py-1.5 rounded-lg text-xs font-bold transition ${statsViewMode === 'general' ? 'bg-orange-600 text-white' : 'text-gray-400 hover:text-white'}`}
-                >
-                  Genel / Sezonluk İstatistikler
-                </button>
+                <button onClick={() => setStatsViewMode('match')} className={`flex-1 py-1.5 rounded-lg text-xs font-bold transition ${statsViewMode === 'match' ? 'bg-orange-600 text-white' : 'text-gray-400'}`}>Maç İstatistiği</button>
+                <button onClick={() => setStatsViewMode('general')} className={`flex-1 py-1.5 rounded-lg text-xs font-bold transition ${statsViewMode === 'general' ? 'bg-orange-600 text-white' : 'text-gray-400'}`}>Genel İstatistikler</button>
               </div>
 
-              {statsViewMode === 'match' ? (
-                <div className="space-y-3">
-                  <div className="flex justify-between items-center">
-                    <h3 className="text-xs font-bold text-gray-200 uppercase tracking-wider">Maç İstatistiği & PIR Analizi</h3>
-                    <span className="text-[10px] text-orange-400 font-bold">{matchType}</span>
-                  </div>
-
-                  <div className="flex bg-gray-950 p-1 rounded-xl border border-gray-800 text-xs">
-                    <button onClick={() => setStatsTeamFilter('all')} className={`flex-1 py-1 rounded-lg font-bold transition ${statsTeamFilter === 'all' ? 'bg-orange-600 text-white' : 'text-gray-400 hover:text-white'}`}>Tüm Oyuncular</button>
-                    <button onClick={() => setStatsTeamFilter('home')} className={`flex-1 py-1 rounded-lg font-bold transition ${statsTeamFilter === 'home' ? 'bg-orange-600 text-white' : 'text-gray-400 hover:text-white'}`}>{homeTeam?.name || 'Ev Sahibi'}</button>
-                    <button onClick={() => setStatsTeamFilter('away')} className={`flex-1 py-1 rounded-lg font-bold transition ${statsTeamFilter === 'away' ? 'bg-orange-600 text-white' : 'text-gray-400 hover:text-white'}`}>{awayTeam?.name || 'Rakip'}</button>
-                  </div>
-
-                  <div className="overflow-x-auto bg-gray-900 border border-gray-800 rounded-xl">
-                    <table className="w-full text-left text-xs text-gray-300">
-                      <thead className="bg-gray-800/90 text-gray-400 uppercase text-[9px] border-b border-gray-800">
-                        <tr>
-                          <th className="p-2">Oyuncu</th>
-                          <th className="p-1 text-center font-black text-amber-400">PIR</th>
-                          <th className="p-2 text-center">Performans</th>
-                          <th className="p-1 text-center">PTS</th>
-                          <th className="p-1 text-center">REB</th>
-                          <th className="p-1 text-center">AST</th>
-                          <th className="p-1 text-center">TOV</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-gray-800">
-                        {filteredBoxScore.map(p => {
-                          const pir = calcPIR(p);
-
-                          let badgeStyle = "bg-gray-800 text-gray-300 border-gray-700";
-                          let badgeLabel = "Dengeli";
-
-                          if (pir >= 15) {
-                            badgeStyle = "bg-amber-500/20 text-amber-300 border-amber-500/60 shadow-sm";
-                            badgeLabel = "🌟 MVP";
-                          } else if (pir >= 10) {
-                            badgeStyle = "bg-emerald-500/20 text-emerald-300 border-emerald-500/60 shadow-sm";
-                            badgeLabel = "🔥 Yüksek";
-                          } else if (pir >= 5) {
-                            badgeStyle = "bg-blue-500/20 text-blue-300 border-blue-500/60";
-                            badgeLabel = "👍 Pozitif";
-                          } else if (pir < 0) {
-                            badgeStyle = "bg-rose-500/20 text-rose-300 border-rose-500/60";
-                            badgeLabel = "⚠️ Riskli";
-                          }
-
-                          return (
-                            <tr key={p.id} className={p.teamType === 'home' ? 'bg-orange-500/5' : 'bg-blue-500/5'}>
-                              <td className="p-2 font-medium">
-                                <div className="font-bold text-white">#{p.number} {p.name}</div>
-                                <div className="text-[8px] text-gray-500">{p.teamType === 'home' ? 'EV' : 'RAKİP'} • {p.position}</div>
-                              </td>
-
-                              <td className="p-1 text-center">
-                                <span className={`inline-block min-w-[28px] py-0.5 px-1.5 rounded-md font-mono font-black text-sm shadow-md ${
-                                  pir >= 15 ? 'bg-amber-500 text-black' :
-                                  pir >= 10 ? 'bg-emerald-500 text-black' :
-                                  pir >= 5 ? 'bg-blue-600 text-white' :
-                                  pir < 0 ? 'bg-rose-600 text-white' : 'bg-gray-800 text-gray-200'
-                                }`}>
-                                  {pir}
-                                </span>
-                              </td>
-
-                              <td className="p-2 text-center">
-                                <span className={`text-[9px] font-black px-2 py-0.5 rounded-full border ${badgeStyle}`}>
-                                  {badgeLabel}
-                                </span>
-                              </td>
-
-                              <td className="p-1 text-center font-bold text-orange-400">{p.pts}</td>
-                              <td className="p-1 text-center">{p.reb}</td>
-                              <td className="p-1 text-center">{p.ast}</td>
-                              <td className="p-1 text-center text-rose-400 font-bold">{p.tov}</td>
-                            </tr>
-                          );
-                        })}
-                      </tbody>
-                    </table>
-                  </div>
-                </div>
-              ) : (
-                <div className="space-y-3">
-                  <div className="bg-gray-900 p-2.5 rounded-xl border border-gray-800 space-y-2">
-                    <div className="flex items-center gap-1 text-xs font-bold text-orange-400 uppercase tracking-wider">
-                      <Filter size={14} /> Sezon Filtreleri
-                    </div>
-
-                    <div className="grid grid-cols-2 gap-2">
-                      <div>
-                        <label className="text-[10px] text-gray-400 font-bold block mb-1">Takım Seç</label>
-                        <select 
-                          value={generalSelectedTeamId} 
-                          onChange={e => setGeneralSelectedTeamId(e.target.value)} 
-                          className="w-full bg-gray-950 border border-gray-700 text-xs text-white p-2 rounded-lg font-bold"
-                        >
-                          {teams.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
-                        </select>
-                      </div>
-
-                      <div>
-                        <label className="text-[10px] text-gray-400 font-bold block mb-1">Maç Türü</label>
-                        <select 
-                          value={generalMatchTypeFilter} 
-                          onChange={e => setGeneralMatchTypeFilter(e.target.value)} 
-                          className="w-full bg-gray-950 border border-gray-700 text-xs text-white p-2 rounded-lg font-bold"
-                        >
-                          <option value="all">Tüm Maçlar</option>
-                          <option value="Lig Maçı">Lig Maçları</option>
-                          <option value="Turnuva">Turnuvalar</option>
-                          <option value="Hazırlık Maçı">Hazırlık Maçları</option>
-                        </select>
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="overflow-x-auto bg-gray-900 border border-gray-800 rounded-xl">
-                    {generalLoading ? (
-                      <div className="p-4 text-center text-xs text-orange-400 font-bold">Veriler hesaplanıyor...</div>
-                    ) : generalStatsList.length === 0 ? (
-                      <div className="p-4 text-center text-xs text-gray-500">Seçili filtrelere ait kayıtlı maç istatistiği bulunamadı.</div>
-                    ) : (
-                      <table className="w-full text-left text-xs text-gray-300">
-                        <thead className="bg-gray-800/80 text-gray-400 uppercase text-[9px]">
-                          <tr>
-                            <th className="p-2">Oyuncu</th>
-                            <th className="p-1 text-center">OM</th>
-                            <th className="p-1 text-center">PTS</th>
-                            <th className="p-1 text-center text-amber-400 font-bold">PIR</th>
-                            <th className="p-1 text-center">REB</th>
-                            <th className="p-1 text-center">AST</th>
-                            <th className="p-1 text-center">STL</th>
-                          </tr>
-                        </thead>
-                        <tbody className="divide-y divide-gray-800">
-                          {generalStatsList.map(p => (
-                            <tr key={p.id} className="hover:bg-gray-800/50">
-                              <td className="p-2 font-medium">
-                                <div className="font-bold text-white">#{p.number} {p.name}</div>
-                                <div className="text-[8px] text-gray-500">{p.position}</div>
-                              </td>
-                              <td className="p-1 text-center font-mono text-gray-400">{p.gp}</td>
-                              <td className="p-1 text-center font-bold text-orange-400">{p.pts}</td>
-                              <td className="p-1 text-center font-black text-amber-400 text-xs">{calcPIR(p)}</td>
-                              <td className="p-1 text-center">{p.reb}</td>
-                              <td className="p-1 text-center">{p.ast}</td>
-                              <td className="p-1 text-center">{p.stl}</td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    )}
-                  </div>
-                </div>
-              )}
+              <div className="overflow-x-auto bg-gray-900 border border-gray-800 rounded-xl">
+                <table className="w-full text-left text-xs text-gray-300">
+                  <thead className="bg-gray-800/90 text-gray-400 uppercase text-[9px] border-b border-gray-800">
+                    <tr>
+                      <th className="p-2">Oyuncu</th>
+                      <th className="p-1 text-center font-black text-amber-400">PIR</th>
+                      <th className="p-1 text-center">PTS</th>
+                      <th className="p-1 text-center">REB</th>
+                      <th className="p-1 text-center">AST</th>
+                      <th className="p-1 text-center">TOV</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-800">
+                    {filteredBoxScore.map(p => (
+                      <tr key={p.id}>
+                        <td className="p-2 font-medium">#{p.number} {p.name}</td>
+                        <td className="p-1 text-center font-bold text-amber-400">{calcPIR(p)}</td>
+                        <td className="p-1 text-center font-bold text-orange-400">{p.pts}</td>
+                        <td className="p-1 text-center">{p.reb}</td>
+                        <td className="p-1 text-center">{p.ast}</td>
+                        <td className="p-1 text-center text-rose-400">{p.tov}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             </div>
           )}
 
@@ -1219,62 +951,12 @@ export default function App() {
           {activeTab === 'settings' && (
             <div className="space-y-3">
               <div className="bg-gray-900 border border-gray-800 rounded-xl p-3 space-y-2">
-                <span className="text-xs font-bold text-orange-400 uppercase tracking-wider flex items-center gap-1 border-b border-gray-800 pb-1.5">
-                  <BookOpen size={14} /> İstatistik Terimleri
-                </span>
-
+                <span className="text-xs font-bold text-orange-400 uppercase tracking-wider flex items-center gap-1"><BookOpen size={14} /> Terimler</span>
                 <div className="grid grid-cols-2 gap-2 text-[11px] text-gray-300">
-                  <div className="bg-gray-800/50 p-1.5 rounded border border-gray-700/40"><strong className="text-orange-400">OM (Oynanan Maç):</strong> Toplam maç sayısı.</div>
-                  <div className="bg-gray-800/50 p-1.5 rounded border border-gray-700/40"><strong className="text-orange-400">PTS:</strong> Atılan toplam sayı.</div>
-                  <div className="bg-gray-800/50 p-1.5 rounded border border-gray-700/40"><strong className="text-blue-400">REB:</strong> Alınan toplam ribaund.</div>
-                  <div className="bg-gray-800/50 p-1.5 rounded border border-gray-700/40"><strong className="text-amber-400">AST:</strong> Sayı pası (Asist).</div>
-                  <div className="bg-gray-800/50 p-1.5 rounded border border-gray-700/40"><strong className="text-emerald-400">STL:</strong> Top çalma.</div>
-                  <div className="bg-gray-800/50 p-1.5 rounded border border-gray-700/40"><strong className="text-purple-400">BLK:</strong> Blok sayısı.</div>
-                  <div className="bg-gray-800/50 p-1.5 rounded border border-gray-700/40"><strong className="text-rose-400">TOV:</strong> Top kaybı.</div>
-                  <div className="bg-gray-800/50 p-1.5 rounded border border-gray-700/40"><strong className="text-amber-300">PIR:</strong> Performans İndeksi (Verimlilik).</div>
-                </div>
-              </div>
-
-              {/* SEPARATING DIVIDER */}
-              <div className="flex items-center my-3">
-                <div className="flex-1 border-t border-gray-800"></div>
-                <span className="px-3 text-[10px] font-black text-orange-500 uppercase tracking-widest bg-gray-900 border border-gray-800 rounded-full py-0.5">
-                  🏀 SAHA İÇİ OYUNCU ROLLERİ
-                </span>
-                <div className="flex-1 border-t border-gray-800"></div>
-              </div>
-
-              {/* OYUNCU POZİSYON & ROL AÇIKLAMALARI */}
-              <div className="bg-gray-900 border border-gray-800 rounded-xl p-3 space-y-2">
-                <span className="text-xs font-bold text-orange-400 uppercase tracking-wider flex items-center gap-1 border-b border-gray-800 pb-1.5">
-                  <Users size={14} /> Pozisyon Rehberi
-                </span>
-
-                <div className="space-y-1.5 text-[11px] text-gray-300">
-                  <div className="bg-gray-800/50 p-2 rounded border border-gray-700/40">
-                    <strong className="text-orange-400 block font-bold">1 - PG (Point Guard / Oyun Kurucu):</strong>
-                    Sahanın lideri, hücum organizasyonunu yönetir, pas dağıtır ve maçın temposunu belirler.
-                  </div>
-
-                  <div className="bg-gray-800/50 p-2 rounded border border-gray-700/40">
-                    <strong className="text-orange-400 block font-bold">2 - SG (Shooting Guard / Şutör Gard):</strong>
-                    Takımın birincil dış skor opsiyonudur. Dış şut yeteneği, perde çıkışı skor bulma ve kanat savunması ana görevidir.
-                  </div>
-
-                  <div className="bg-gray-800/50 p-2 rounded border border-gray-700/40">
-                    <strong className="text-orange-400 block font-bold">3 - SF (Small Forward / Kısa Forvet):</strong>
-                    Çok yönlü oyuncudur. Hem içeriden hem dışarıdan skor üretebilir, hızlı hücumu koşar ve rakip kanatları savunur.
-                  </div>
-
-                  <div className="bg-gray-800/50 p-2 rounded border border-gray-700/40">
-                    <strong className="text-orange-400 block font-bold">4 - PF (Power Forward / Uzun Forvet):</strong>
-                    Pota altı mücadelesi verir, orta mesafe/dış şut katkısı sunar, perdeleme yapar ve ribaund toplar.
-                  </div>
-
-                  <div className="bg-gray-800/50 p-2 rounded border border-gray-700/40">
-                    <strong className="text-orange-400 block font-bold">5 - C (Center / Pivot):</strong>
-                    Boyalı alanın koruyucusudur. Çember savunması (blok), savunma ve hücum ribaundları ile çember etrafı bitiricilik temel rolüdür.
-                  </div>
+                  <div className="bg-gray-800/50 p-1.5 rounded"><strong className="text-orange-400">PTS:</strong> Toplam sayı</div>
+                  <div className="bg-gray-800/50 p-1.5 rounded"><strong className="text-blue-400">REB:</strong> Ribaund</div>
+                  <div className="bg-gray-800/50 p-1.5 rounded"><strong className="text-amber-400">AST:</strong> Asist</div>
+                  <div className="bg-gray-800/50 p-1.5 rounded"><strong className="text-amber-300">PIR:</strong> Performans verimliliği</div>
                 </div>
               </div>
             </div>
